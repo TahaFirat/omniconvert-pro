@@ -1,6 +1,8 @@
-/* OmniConvert Pro — Native iOS 26/27 Liquid Glass Design System */
+/* OmniConvert — Native iOS 27 Liquid Glass + Capacitor Viewport-Locked Design System */
 
 :root {
+  color-scheme: light;
+
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
@@ -15,55 +17,60 @@
   --radius-xl: 24px;
   --radius-full: 9999px;
 
-  /* Apple System Palette — Light */
+  /* Apple System Palette — High-Contrast Light */
   --bg-app: #F2F2F7;
   --bg-surface: #FFFFFF;
-  --bg-surface-secondary: #EFEFF4;
-  --bg-fill: rgba(120, 120, 128, 0.12);
-  --bg-fill-strong: rgba(120, 120, 128, 0.2);
+  --bg-surface-secondary: #E8E8ED;
+  --bg-fill: rgba(118, 118, 128, 0.13);
+  --bg-fill-strong: rgba(118, 118, 128, 0.22);
 
-  --separator: rgba(60, 60, 67, 0.14);
+  --separator: rgba(60, 60, 67, 0.13);
   --separator-strong: rgba(60, 60, 67, 0.24);
 
-  --text-primary: #000000;
-  --text-secondary: #3C3C43;
-  --text-muted: #8E8E93;
+  --text-primary: #09090B;
+  --text-secondary: #2C2C30;
+  --text-muted: #58585E;
 
   --accent: #007AFF;
   --accent-soft: rgba(0, 122, 255, 0.12);
-  --green: #34C759;
-  --green-soft: rgba(52, 199, 89, 0.13);
-  --green-text: #1B7F37;
+  --green: #30B755;
+  --green-soft: rgba(48, 183, 85, 0.14);
+  --green-text: #146C2E;
   --indigo: #5856D6;
-  --indigo-soft: rgba(88, 86, 214, 0.12);
-  --indigo-text: #4845B5;
-  --orange: #FF9500;
-  --orange-soft: rgba(255, 149, 0, 0.13);
-  --orange-text: #B25000;
-  --red: #FF3B30;
-  --red-soft: rgba(255, 59, 48, 0.12);
-  --red-text: #C9231A;
+  --indigo-soft: rgba(88, 86, 214, 0.13);
+  --indigo-text: #403EA8;
+  --orange: #F57C00;
+  --orange-soft: rgba(245, 124, 0, 0.14);
+  --orange-text: #A54B00;
+  --red: #E53935;
+  --red-soft: rgba(229, 57, 53, 0.13);
+  --red-text: #B71C1C;
+  --pink: #D81B60;
+  --pink-soft: rgba(216, 27, 96, 0.12);
+  --teal: #00897B;
+  --teal-soft: rgba(0, 137, 123, 0.13);
+  --purple: #7B1FA2;
+  --purple-soft: rgba(123, 31, 162, 0.12);
 
-  /* Top header material */
-  --header-glass: rgba(242, 242, 247, 0.72);
+  /* Translucent Top Header */
+  --header-glass: rgba(242, 242, 247, 0.86);
 
   /* iOS 27 Floating Liquid Glass Tab Bar — Light */
   --liquid-bar-bg: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.54) 0%,
-    rgba(246, 246, 250, 0.38) 100%
+    rgba(255, 255, 255, 0.72) 0%,
+    rgba(246, 246, 250, 0.56) 100%
   );
-  --liquid-bar-border: rgba(255, 255, 255, 0.75);
-  --liquid-bar-outer-ring: rgba(0, 0, 0, 0.06);
+  --liquid-bar-border: rgba(255, 255, 255, 0.85);
   --liquid-bar-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.11),
-    0 2px 8px rgba(0, 0, 0, 0.05),
-    inset 0 1px 1px rgba(255, 255, 255, 0.9),
-    inset 0 -0.5px 0.5px rgba(0, 0, 0, 0.04);
-  --liquid-pill-bg: rgba(255, 255, 255, 0.72);
+    0 12px 32px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 1px 1px rgba(255, 255, 255, 0.95),
+    inset 0 -0.5px 0.5px rgba(0, 0, 0, 0.06);
+  --liquid-pill-bg: rgba(255, 255, 255, 0.86);
   --liquid-pill-shadow:
-    0 2px 10px rgba(0, 0, 0, 0.07),
-    inset 0 1px 0.5px rgba(255, 255, 255, 0.95);
+    0 2px 10px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0.5px rgba(255, 255, 255, 1);
 
   --sheet-bg: #F2F2F7;
   --sheet-card: #FFFFFF;
@@ -71,65 +78,74 @@
 
 [data-theme='dark'],
 [data-theme='amoled'] {
-  --bg-app: #000000;
-  --bg-surface: #1C1C1E;
-  --bg-surface-secondary: #2C2C2E;
-  --bg-fill: rgba(120, 120, 128, 0.24);
-  --bg-fill-strong: rgba(120, 120, 128, 0.36);
+  color-scheme: dark;
+
+  --bg-app: #09090B;
+  --bg-surface: #18181B;
+  --bg-surface-secondary: #242429;
+  --bg-fill: rgba(255, 255, 255, 0.09);
+  --bg-fill-strong: rgba(255, 255, 255, 0.16);
 
   --separator: rgba(255, 255, 255, 0.09);
-  --separator-strong: rgba(255, 255, 255, 0.16);
+  --separator-strong: rgba(255, 255, 255, 0.17);
 
-  --text-primary: #FFFFFF;
-  --text-secondary: #EBEBF5;
-  --text-muted: #8E8E93;
+  --text-primary: #FAFAFA;
+  --text-secondary: #D4D4D8;
+  --text-muted: #A1A1AA;
 
   --accent: #0A84FF;
-  --accent-soft: rgba(10, 132, 255, 0.16);
+  --accent-soft: rgba(10, 132, 255, 0.18);
   --green: #30D158;
-  --green-soft: rgba(48, 209, 88, 0.15);
+  --green-soft: rgba(48, 209, 88, 0.17);
   --green-text: #5CE07E;
-  --indigo: #5E5CE6;
-  --indigo-soft: rgba(94, 92, 230, 0.18);
-  --indigo-text: #9E9CFF;
+  --indigo: #7C7AFF;
+  --indigo-soft: rgba(124, 122, 255, 0.18);
+  --indigo-text: #A8A6FF;
   --orange: #FF9F0A;
-  --orange-soft: rgba(255, 159, 10, 0.16);
-  --orange-text: #FFB84D;
+  --orange-soft: rgba(255, 159, 10, 0.18);
+  --orange-text: #FFC266;
   --red: #FF453A;
-  --red-soft: rgba(255, 69, 58, 0.16);
-  --red-text: #FF6961;
+  --red-soft: rgba(255, 69, 58, 0.18);
+  --red-text: #FF7B73;
+  --pink: #FF375F;
+  --pink-soft: rgba(255, 55, 95, 0.18);
+  --teal: #40C8E0;
+  --teal-soft: rgba(64, 200, 224, 0.17);
+  --purple: #BF5AF2;
+  --purple-soft: rgba(191, 90, 242, 0.18);
 
-  --header-glass: rgba(0, 0, 0, 0.68);
+  --header-glass: rgba(9, 9, 11, 0.84);
 
   /* iOS 27 Floating Liquid Glass Tab Bar — Dark */
   --liquid-bar-bg: linear-gradient(
     180deg,
-    rgba(42, 42, 46, 0.36) 0%,
-    rgba(22, 22, 26, 0.28) 100%
+    rgba(38, 38, 44, 0.52) 0%,
+    rgba(20, 20, 24, 0.44) 100%
   );
-  --liquid-bar-border: rgba(255, 255, 255, 0.16);
-  --liquid-bar-outer-ring: rgba(0, 0, 0, 0.5);
+  --liquid-bar-border: rgba(255, 255, 255, 0.17);
   --liquid-bar-shadow:
-    0 14px 36px rgba(0, 0, 0, 0.52),
-    0 2px 10px rgba(0, 0, 0, 0.32),
-    inset 0 0.75px 0.5px rgba(255, 255, 255, 0.24),
-    inset 0 -0.5px 0.5px rgba(255, 255, 255, 0.06);
+    0 14px 36px rgba(0, 0, 0, 0.56),
+    0 2px 10px rgba(0, 0, 0, 0.34),
+    inset 0 0.75px 0.5px rgba(255, 255, 255, 0.25),
+    inset 0 -0.5px 0.5px rgba(0, 0, 0, 0.12);
   --liquid-pill-bg: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.14) 0%,
-    rgba(255, 255, 255, 0.07) 100%
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(255, 255, 255, 0.08) 100%
   );
   --liquid-pill-shadow:
-    0 2px 10px rgba(0, 0, 0, 0.22),
-    inset 0 0.75px 0.5px rgba(255, 255, 255, 0.24);
+    0 2px 10px rgba(0, 0, 0, 0.25),
+    inset 0 0.75px 0.5px rgba(255, 255, 255, 0.26);
 
-  --sheet-bg: #141416;
-  --sheet-card: #1C1C1E;
+  --sheet-bg: #111114;
+  --sheet-card: #1C1C20;
 }
 
 [data-theme='amoled'] {
-  --bg-surface: #121214;
-  --bg-surface-secondary: #1E1E22;
+  --bg-app: #000000;
+  --bg-surface: #121215;
+  --bg-surface-secondary: #1D1D22;
+  --header-glass: rgba(0, 0, 0, 0.86);
 }
 
 *,
@@ -139,21 +155,26 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* ============================================================================
+   CAPACITOR iOS VIEWPORT LOCK — ZERO BLACK VOID ON SCROLL
+   ============================================================================ */
 html,
 body,
 #root {
+  position: fixed;
+  inset: 0;
   margin: 0;
   padding: 0;
   width: 100%;
-  min-height: 100%;
-  max-width: 100vw;
-  overflow-x: hidden;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
   background-color: var(--bg-app);
   color: var(--text-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-text-size-adjust: 100%;
 }
 
 button,
@@ -161,11 +182,25 @@ input,
 select,
 textarea {
   font-family: inherit;
-  color: inherit;
+  color: var(--text-primary);
 }
 
 button {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: none;
   cursor: pointer;
+}
+
+/* Prevent iOS WKWebView auto-zoom on input focus (>= 16px required by WebKit) */
+input[type='text'],
+input[type='search'],
+input[type='number'],
+input[type='password'],
+select,
+textarea {
+  font-size: 16px;
 }
 
 :focus-visible {
@@ -173,59 +208,72 @@ button {
   outline-offset: 2px;
 }
 
-/* Shell */
+/* Locked Native App Shell */
 .app-shell {
+  position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
   width: 100%;
-  max-width: 100vw;
-  overflow-x: hidden;
+  height: 100%;
+  overflow: hidden;
   background: var(--bg-app);
+  color: var(--text-primary);
 }
 
-/* Minimal iOS Translucent Header */
+/* Pinned Native iOS Header */
 .top-bar {
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 40;
-  padding-top: calc(var(--safe-top) + 12px);
+  padding-top: calc(var(--safe-top) + 10px);
   padding-bottom: 10px;
-  padding-left: max(18px, var(--safe-left));
-  padding-right: max(18px, var(--safe-right));
+  padding-left: max(16px, var(--safe-left));
+  padding-right: max(16px, var(--safe-right));
   background: var(--header-glass);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 0.5px solid var(--separator);
 }
 
 .top-bar-inner {
-  max-width: 680px;
+  max-width: 720px;
   margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .nav-large-title {
   margin: 0;
-  font-size: 1.7rem;
+  font-size: 1.48rem;
   font-weight: 700;
   letter-spacing: -0.03em;
-  line-height: 1.15;
+  line-height: 1.18;
   color: var(--text-primary);
+  min-width: 0;
 }
 
-/* Main Content Area — extra bottom padding so items scroll visibly behind the floating Liquid Glass tab bar */
-.main-content {
-  flex: 1;
+/* Dedicated Native-Momentum Scroll Container — NEVER exposes WKWebView black void */
+.scroll-viewport {
+  flex: 1 1 0%;
+  min-height: 0;
   width: 100%;
-  max-width: 680px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  background: var(--bg-app);
+}
+
+.main-content {
+  width: 100%;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 8px max(16px, var(--safe-right)) calc(108px + var(--safe-bottom)) max(16px, var(--safe-left));
+  padding: 14px max(16px, var(--safe-right)) calc(112px + var(--safe-bottom)) max(16px, var(--safe-left));
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
 /* ============================================================================
@@ -238,7 +286,7 @@ button {
   bottom: 0;
   z-index: 50;
   pointer-events: none;
-  padding: 0 max(16px, var(--safe-left)) calc(var(--safe-bottom) + 12px) max(16px, var(--safe-right));
+  padding: 0 max(14px, var(--safe-left)) calc(var(--safe-bottom) + 10px) max(14px, var(--safe-right));
   display: flex;
   justify-content: center;
 }
@@ -247,7 +295,7 @@ button {
   pointer-events: auto;
   position: relative;
   width: 100%;
-  max-width: 396px;
+  max-width: 404px;
   padding: 5px;
   border-radius: 34px;
   background: var(--liquid-bar-bg);
@@ -261,7 +309,6 @@ button {
   overflow: hidden;
 }
 
-/* Subtle top glass refraction sheen */
 .liquid-glass-nav::before {
   content: '';
   position: absolute;
@@ -269,7 +316,7 @@ button {
   border-radius: 34px;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.16) 0%,
     rgba(255, 255, 255, 0.02) 45%,
     rgba(255, 255, 255, 0) 100%
   );
@@ -290,7 +337,7 @@ button {
   border-radius: 28px;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: 500;
   letter-spacing: -0.01em;
   transition: color 0.18s ease, background 0.22s ease, transform 0.15s ease, box-shadow 0.22s ease;
@@ -324,20 +371,21 @@ button {
   justify-content: center;
 }
 
-/* iOS Inset Grouped Lists & Cards */
+/* iOS Inset Grouped Lists & Surfaces */
 .section-header {
-  font-size: 0.75rem;
+  font-size: 0.76rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
-  padding: 0 14px;
+  padding: 0 6px;
   margin: 0 0 8px 0;
 }
 
 .ios-group {
   background: var(--bg-surface);
   border-radius: var(--radius-lg);
+  border: 0.5px solid var(--separator);
   overflow: hidden;
   min-width: 0;
 }
@@ -348,11 +396,11 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 13px 16px;
+  padding: 13px 15px;
   background: transparent;
   border: none;
   text-align: left;
-  min-height: 50px;
+  min-height: 52px;
   position: relative;
   text-decoration: none;
   color: var(--text-primary);
@@ -367,7 +415,7 @@ button {
   content: '';
   position: absolute;
   top: 0;
-  left: 16px;
+  left: 15px;
   right: 0;
   height: 0.5px;
   background: var(--separator);
@@ -376,8 +424,88 @@ button {
 .card {
   background: var(--bg-surface);
   border-radius: var(--radius-lg);
-  padding: 16px;
+  border: 0.5px solid var(--separator);
+  padding: 15px;
   min-width: 0;
+  color: var(--text-primary);
+}
+
+/* Horizontal Pill Strip */
+.pill-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pill-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.filter-pill {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  min-height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--bg-surface);
+  border: 0.5px solid var(--separator);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.filter-pill.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #FFFFFF;
+}
+
+/* Tool Card Grid — 2 Columns on Mobile, 3 on Tablet */
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (min-width: 600px) {
+  .tools-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+
+.tool-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border: 0.5px solid var(--separator);
+  color: var(--text-primary);
+  text-align: left;
+  min-width: 0;
+  transition: transform 0.14s ease, border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.tool-card:active {
+  transform: scale(0.97);
+  background: var(--bg-surface-secondary);
+}
+
+.tool-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 /* Native iOS UISwitch */
@@ -431,8 +559,8 @@ button {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
-  padding: 2px;
-  border-radius: 10px;
+  padding: 3px;
+  border-radius: 11px;
   background: var(--bg-fill);
   gap: 2px;
 }
@@ -441,8 +569,8 @@ button {
   border: none;
   border-radius: 8px;
   padding: 7px 6px;
-  min-height: 32px;
-  font-size: 0.78rem;
+  min-height: 34px;
+  font-size: 0.8rem;
   font-weight: 500;
   background: transparent;
   color: var(--text-secondary);
@@ -456,7 +584,7 @@ button {
   background: var(--bg-surface);
   color: var(--text-primary);
   font-weight: 600;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
 }
 
 /* Buttons */
@@ -475,6 +603,7 @@ button {
   min-height: 46px;
   max-width: 100%;
   text-decoration: none;
+  color: var(--text-primary);
 }
 
 .btn:active:not(:disabled) {
@@ -507,14 +636,39 @@ button {
   color: var(--red-text);
 }
 
-/* Subtle Status Tags */
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: 50%;
+  background: var(--bg-fill);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.icon-btn:active:not(:disabled) {
+  transform: scale(0.92);
+  background: var(--bg-fill-strong);
+}
+
+.icon-btn:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+
+/* Status Tags */
 .tag {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 3px 8px;
   border-radius: var(--radius-full);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -539,32 +693,39 @@ button {
   color: var(--red-text);
 }
 
+.tag-accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .truncate {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
-/* iOS Search / Text Input */
+/* iOS Search / Text Input (16px avoids Safari auto-zoom) */
 .input-field {
   width: 100%;
   min-width: 0;
   padding: 10px 13px;
   border-radius: 12px;
-  border: none;
+  border: 0.5px solid var(--separator);
   background: var(--bg-fill);
   color: var(--text-primary);
-  font-size: 0.92rem;
+  font-size: 16px;
+  line-height: 1.3;
 }
 
 .input-field::placeholder {
   color: var(--text-muted);
 }
 
-/* Thin Apple Progress Track */
+/* Progress Track */
 .progress-track {
   width: 100%;
-  height: 4px;
+  height: 5px;
   border-radius: var(--radius-full);
   background: var(--bg-fill);
   overflow: hidden;
@@ -577,18 +738,18 @@ button {
   transition: width 0.2s ease;
 }
 
-/* iOS Sheet Modal */
+/* iOS Sheet Modal — Internal Scroll, Safe Area Compliant */
 .modal-backdrop {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(0, 0, 0, 0.52);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: var(--safe-top) 0 0 0;
+  padding: calc(var(--safe-top) + 12px) 0 0 0;
 }
 
 @media (min-width: 640px) {
@@ -600,19 +761,23 @@ button {
 
 .modal-sheet {
   width: 100%;
-  max-width: 560px;
-  max-height: calc(100dvh - var(--safe-top) - 16px);
+  max-width: 580px;
+  max-height: calc(100% - 8px);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
   background: var(--sheet-bg);
+  color: var(--text-primary);
+  border-top: 0.5px solid var(--separator-strong);
   border-radius: 26px 26px 0 0;
-  padding: 10px 18px calc(22px + var(--safe-bottom)) 18px;
+  padding: 10px 16px calc(24px + var(--safe-bottom)) 16px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .sheet-grabber {
-  width: 36px;
+  width: 38px;
   height: 5px;
   border-radius: var(--radius-full);
   background: var(--separator-strong);
@@ -622,6 +787,7 @@ button {
 
 @media (min-width: 640px) {
   .modal-sheet {
+    border: 0.5px solid var(--separator-strong);
     border-radius: 24px;
     padding: 20px 22px;
   }
@@ -646,4 +812,15 @@ button {
   .grid-3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* Transparency checkerboard for image/PNG/SVG preview */
+.preview-checkerboard {
+  background-image:
+    linear-gradient(45deg, rgba(128, 128, 128, 0.14) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(128, 128, 128, 0.14) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(128, 128, 128, 0.14) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(128, 128, 128, 0.14) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }

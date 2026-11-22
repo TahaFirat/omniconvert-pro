@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Star } from 'lucide-react';
 import { AppProvider, useApp } from './application/AppContext';
 import { BottomNav } from './presentation/components/BottomNav';
@@ -11,17 +11,26 @@ import { SettingsScreen } from './presentation/screens/SettingsScreen';
 
 const AppShell: React.FC = () => {
   const { activeTab, toastMessage, reviewPromptVisible, dismissReviewPrompt, dict } = useApp();
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }, [activeTab]);
 
   return (
     <div className="app-shell">
       <TopBar />
 
-      <main className="main-content">
-        {activeTab === 'convert' && <ConvertScreen />}
-        {activeTab === 'queue' && <QueueScreen />}
-        {activeTab === 'history' && <HistoryPresetsScreen />}
-        {activeTab === 'settings' && <SettingsScreen />}
-      </main>
+      <div ref={scrollRef} className="scroll-viewport">
+        <main className="main-content">
+          {activeTab === 'convert' && <ConvertScreen />}
+          {activeTab === 'queue' && <QueueScreen />}
+          {activeTab === 'history' && <HistoryPresetsScreen />}
+          {activeTab === 'settings' && <SettingsScreen />}
+        </main>
+      </div>
 
       <BottomNav />
       <PaywallModal />
@@ -30,11 +39,12 @@ const AppShell: React.FC = () => {
       {reviewPromptVisible && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={dict.reviewPrompt.title}>
           <div className="modal-sheet" style={{ maxWidth: 420 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '1.02rem' }}>
+            <div className="sheet-grabber" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: '1.05rem' }}>
               <Star size={20} color="#F59E0B" fill="#F59E0B" />
               <span>{dict.reviewPrompt.title}</span>
             </div>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
               {dict.reviewPrompt.body}
             </p>
             <div className="grid-2">
@@ -57,7 +67,7 @@ const AppShell: React.FC = () => {
         </div>
       )}
 
-      {/* Non-intrusive Toast */}
+      {/* Non-intrusive Floating Toast */}
       {toastMessage && (
         <div
           role="status"
@@ -68,16 +78,17 @@ const AppShell: React.FC = () => {
             transform: 'translateX(-50%)',
             zIndex: 130,
             maxWidth: 'calc(100vw - 32px)',
-            padding: '9px 16px',
+            padding: '10px 16px',
             borderRadius: 'var(--radius-full)',
             background: 'var(--bg-surface-secondary)',
             color: 'var(--text-primary)',
             border: '0.5px solid var(--separator-strong)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
-            fontSize: '0.82rem',
+            fontSize: '0.84rem',
             fontWeight: 500,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.32)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.34)',
+            textAlign: 'center',
           }}
         >
           {toastMessage}

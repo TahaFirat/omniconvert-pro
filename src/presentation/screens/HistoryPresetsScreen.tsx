@@ -14,7 +14,7 @@ export const HistoryPresetsScreen: React.FC = () => {
     deleteHistoryItems,
     customPresets,
     deleteCustomPreset,
-    setActiveTab,
+    launchCustomPreset,
   } = useApp();
 
   const [query, setQuery] = useState('');
@@ -127,7 +127,7 @@ export const HistoryPresetsScreen: React.FC = () => {
                     type="button"
                     className="btn btn-ghost"
                     style={{ minHeight: 32, padding: '4px 8px', fontSize: '0.82rem' }}
-                    onClick={() => setActiveTab('convert')}
+                    onClick={() => launchCustomPreset(p)}
                   >
                     {dict.history.applyPreset}
                   </button>

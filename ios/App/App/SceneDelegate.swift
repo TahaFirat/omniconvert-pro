@@ -13,10 +13,20 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         let rootVC = MainViewController()
         window = UIWindow(windowScene: windowScene)
+        window?.backgroundColor = UIColor { trait in
+            trait.userInterfaceStyle == .dark
+                ? UIColor(red: 0.035, green: 0.035, blue: 0.043, alpha: 1.0)
+                : UIColor(red: 0.949, green: 0.949, blue: 0.969, alpha: 1.0)
+        }
         window?.rootViewController = rootVC
         window?.makeKeyAndVisible()
 
-        rootVC.webView?.scrollView.contentInsetAdjustmentBehavior = .never
+        if let sv = rootVC.webView?.scrollView {
+            sv.contentInsetAdjustmentBehavior = .never
+            sv.bounces = false
+            sv.alwaysBounceVertical = false
+            sv.isScrollEnabled = false
+        }
 
         if !connectionOptions.urlContexts.isEmpty {
             importIncomingURLs(connectionOptions.urlContexts)

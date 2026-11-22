@@ -43,7 +43,7 @@ async function runNativeIosMediaConversion(
     data: inputB64,
     directory: Directory.Cache,
   });
-  const nativePath = written.uri.replace(/^file:\/\//, '');
+  const nativePath = decodeURIComponent(written.uri.replace(/^file:\/\//, ''));
 
   try {
     if (targetFormat === 'gif') {

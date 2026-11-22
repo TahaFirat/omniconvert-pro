@@ -27,7 +27,10 @@ export const QueueScreen: React.FC = () => {
     bundleCompletedAsZip,
   } = useApp();
 
-  const [previewOutput, setPreviewOutput] = useState<ConversionOutput | null>(null);
+  const [previewState, setPreviewState] = useState<{
+    output: ConversionOutput;
+    originalBytes: number;
+  } | null>(null);
   const completedCount = jobs.filter((j) => j.status === 'completed' && j.output?.blob).length;
 
   return (
@@ -38,7 +41,7 @@ export const QueueScreen: React.FC = () => {
             <button
               type="button"
               className="btn btn-secondary"
-              style={{ minHeight: 36, padding: '6px 12px', fontSize: '0.8rem' }}
+              style={{ minHeight: 36, padding: '6px 12px', fontSize: '0.82rem' }}
               onClick={() => void bundleCompletedAsZip()}
             >
               <Archive size={15} />
@@ -48,7 +51,7 @@ export const QueueScreen: React.FC = () => {
           <button
             type="button"
             className="btn btn-ghost"
-            style={{ minHeight: 36, padding: '6px 10px', fontSize: '0.82rem' }}
+            style={{ minHeight: 36, padding: '6px 10px', fontSize: '0.84rem' }}
             onClick={clearCompletedJobs}
           >
             {dict.queue.clearCompleted}
@@ -58,7 +61,7 @@ export const QueueScreen: React.FC = () => {
 
       {jobs.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: '44px 20px' }}>
-          <div style={{ fontWeight: 600, fontSize: '0.96rem', color: 'var(--text-primary)' }}>
+          <div style={{ fontWeight: 600, fontSize: '0.98rem', color: 'var(--text-primary)' }}>
             {dict.queue.emptyTitle}
           </div>
           <p style={{ margin: '6px 0 0 0', fontSize: '0.84rem', color: 'var(--text-muted)' }}>
@@ -84,14 +87,14 @@ export const QueueScreen: React.FC = () => {
                 key={job.id}
                 className="ios-row"
                 data-testid={`queue-job-${job.status}`}
-                style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10, padding: '14px 16px' }}
+                style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10, padding: '14px 15px' }}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="truncate" style={{ fontWeight: 600, fontSize: '0.92rem' }}>
+                    <div className="truncate" style={{ fontWeight: 600, fontSize: '0.94rem', color: 'var(--text-primary)' }}>
                       {job.output?.fileName ?? job.file.name}
                     </div>
-                    <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 3 }}>
                       {statusText} • {formatSizeComparison(job.file.size, job.output?.sizeBytes)}
                       {job.status === 'running' && job.etaSeconds
                         ? ` • ${interpolate(dict.queue.etaSeconds, { sec: job.etaSeconds })}`
@@ -108,7 +111,7 @@ export const QueueScreen: React.FC = () => {
                 )}
 
                 {job.errorMessage && (
-                  <div style={{ fontSize: '0.78rem', color: 'var(--red-text)' }}>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--red-text)', lineHeight: 1.4 }}>
                     {job.errorMessage}
                     {job.trialRefunded ? ` (${dict.queue.trialRefunded})` : ''}
                   </div>
@@ -119,7 +122,7 @@ export const QueueScreen: React.FC = () => {
                     <button
                       type="button"
                       className="btn btn-danger"
-                      style={{ minHeight: 34, padding: '6px 12px', fontSize: '0.78rem' }}
+                      style={{ minHeight: 36, padding: '6px 13px', fontSize: '0.8rem' }}
                       onClick={() => cancelJob(job.id)}
                     >
                       <X size={14} />
@@ -131,22 +134,28 @@ export const QueueScreen: React.FC = () => {
                     <>
                       <button
                         type="button"
+                        data-testid="queue-preview-btn"
                         className="btn btn-secondary"
-                        style={{ minHeight: 34, padding: '6px 12px', fontSize: '0.78rem' }}
-                        onClick={() => setPreviewOutput(job.output!)}
+                        style={{ minHeight: 38, padding: '7px 14px', fontSize: '0.82rem' }}
+                        onClick={() =>
+                          setPreviewState({
+                            output: job.output!,
+                            originalBytes: job.file.size,
+                          })
+                        }
                       >
-                        <Eye size={14} />
+                        <Eye size={15} />
                         <span>{dict.queue.preview}</span>
                       </button>
                       <button
                         type="button"
                         className="btn btn-primary"
-                        style={{ minHeight: 34, padding: '6px 12px', fontSize: '0.78rem' }}
+                        style={{ minHeight: 38, padding: '7px 14px', fontSize: '0.82rem' }}
                         onClick={() =>
                           void shareOrDownloadOutput(job.output!.blob!, job.output!.fileName)
                         }
                       >
-                        <Share2 size={14} />
+                        <Share2 size={15} />
                         <span>{dict.queue.share}</span>
                       </button>
                     </>
@@ -156,7 +165,7 @@ export const QueueScreen: React.FC = () => {
                     <button
                       type="button"
                       className="btn btn-secondary"
-                      style={{ minHeight: 34, padding: '6px 12px', fontSize: '0.78rem' }}
+                      style={{ minHeight: 36, padding: '6px 13px', fontSize: '0.8rem' }}
                       onClick={() => retryJob(job.id)}
                     >
                       <RotateCcw size={14} />
@@ -170,7 +179,11 @@ export const QueueScreen: React.FC = () => {
         </div>
       )}
 
-      <FilePreviewModal output={previewOutput} onClose={() => setPreviewOutput(null)} />
+      <FilePreviewModal
+        output={previewState?.output ?? null}
+        originalSizeBytes={previewState?.originalBytes}
+        onClose={() => setPreviewState(null)}
+      />
     </div>
   );
 };

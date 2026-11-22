@@ -44,13 +44,24 @@ export interface NativeMediaResult {
   sizeBytes: number;
 }
 
+export interface NativePdfPreviewPageResult {
+  base64Data: string;
+  mime: string;
+  pageCount: number;
+  width: number;
+  height: number;
+}
+
 export interface OmniNativeEnginePlugin {
   isAvailable(): Promise<{ available: boolean; platform: string; osVersion: string }>;
+  setNativeAppearance(options: { theme: 'light' | 'dark' | 'amoled' | 'system' }): Promise<{ applied: string }>;
   convertImage(options: NativeImageConvertParams): Promise<NativeBinaryResult>;
   recognizeTextOcr(options: NativeOcrParams): Promise<NativeOcrResult>;
   convertMedia(options: NativeMediaParams): Promise<NativeMediaResult>;
   videoToGif(options: { inputPath: string; fps?: number; maxDurationSec?: number; maxDimension?: number }): Promise<NativeBinaryResult>;
   pdfToImages(options: { base64Data: string; targetFormat: string; dpi: number }): Promise<NativeBinaryResult>;
+  renderPdfPreviewPage(options: { base64Data: string; pageNumber: number; maxWidth?: number }): Promise<NativePdfPreviewPageResult>;
+  openQuickLook(options: { base64Data: string; fileName: string }): Promise<{ presented: boolean }>;
   cleanupTempWorkspace(): Promise<{ cleanedBytes: number; removedDirs: number }>;
   getSharedInboxFiles(): Promise<{ files: Array<{ name: string; base64Data: string; mime: string }> }>;
 }
@@ -145,6 +156,21 @@ export function base64ToUint8(base64: string): Uint8Array {
     out[i] = binary.charCodeAt(i);
   }
   return out;
+}
+
+/**
+ * Opens native iOS QuickLook (QLPreviewController) for pinch-to-zoom full-screen preview.
+ */
+export async function openNativeQuickLook(blob: Blob, fileName: string): Promise<boolean> {
+  if (!isNativeIos()) return false;
+  try {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const base64Data = await uint8ToBase64(bytes);
+    const res = await OmniNativeEngine.openQuickLook({ base64Data, fileName });
+    return Boolean(res.presented);
+  } catch {
+    return false;
+  }
 }
 
 /**

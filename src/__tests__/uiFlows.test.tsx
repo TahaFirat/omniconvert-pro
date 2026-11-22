@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { PDFDocument } from 'pdf-lib';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { App } from '../App';
 
@@ -7,7 +8,18 @@ function createSampleJsonFile(): File {
   return new File([payload], 'data.json', { type: 'application/json' });
 }
 
-describe('OmniConvert Pro UI & Store Compliance Flows', () => {
+async function createSamplePdfFile(name: string, pages = 1): Promise<File> {
+  const doc = await PDFDocument.create();
+  for (let i = 0; i < pages; i++) {
+    doc.addPage([400, 600]);
+  }
+  const bytes = await doc.save();
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return new File([copy], name, { type: 'application/pdf' });
+}
+
+describe('OmniConvert Pro UI, PDF Merge, Preview & Store Compliance Flows', () => {
   beforeEach(() => {
     localStorage.clear();
   });
@@ -22,7 +34,7 @@ describe('OmniConvert Pro UI & Store Compliance Flows', () => {
     expect(screen.getByTestId('offline-lock-banner')).toBeInTheDocument();
   });
 
-  it('runs a real local JSON -> YAML conversion end-to-end into the Queue', async () => {
+  it('runs a real local JSON -> YAML conversion end-to-end and opens Preview modal', async () => {
     render(<App />);
     const fileInput = screen.getByTestId('file-input');
     fireEvent.change(fileInput, { target: { files: [createSampleJsonFile()] } });
@@ -35,6 +47,32 @@ describe('OmniConvert Pro UI & Store Compliance Flows', () => {
 
     const startBtn = screen.getByTestId('start-conversion-btn');
     fireEvent.click(startBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('queue-job-completed')).toBeInTheDocument();
+    });
+
+    // Open live preview modal and verify converted YAML content is shown
+    fireEvent.click(screen.getByTestId('queue-preview-btn'));
+    expect(await screen.findByText(/OmniConvert/)).toBeInTheDocument();
+  });
+
+  it('completes the guided PDF Merge workflow with 2 PDFs end-to-end', async () => {
+    const pdf1 = await createSamplePdfFile('sozlesme_1.pdf', 1);
+    const pdf2 = await createSamplePdfFile('ek_2.pdf', 2);
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('tool-card-pdf-merge'));
+
+    const wsInput = await screen.findByTestId('workspace-file-input');
+    fireEvent.change(wsInput, { target: { files: [pdf1, pdf2] } });
+
+    const mergeBtn = await screen.findByTestId('start-conversion-btn');
+    await waitFor(() => {
+      expect(mergeBtn).not.toBeDisabled();
+    });
+
+    fireEvent.click(mergeBtn);
 
     await waitFor(() => {
       expect(screen.getByTestId('queue-job-completed')).toBeInTheDocument();
@@ -59,6 +97,7 @@ describe('OmniConvert Pro UI & Store Compliance Flows', () => {
     expect(await screen.findByTestId('settings-restore-btn')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('open-licenses-btn'));
     expect(await screen.findByText(/Capacitor \(Core & iOS\)/i)).toBeInTheDocument();
+    expect(await screen.findByText(/PDF\.js/i)).toBeInTheDocument();
     expect(await screen.findByText(/Zero GPL/i)).toBeInTheDocument();
   });
 });

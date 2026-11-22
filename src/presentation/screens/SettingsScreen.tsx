@@ -164,8 +164,8 @@ export const SettingsScreen: React.FC = () => {
               style={{
                 border: 'none',
                 background: 'transparent',
-                color: 'var(--text-muted)',
-                fontSize: '0.92rem',
+                color: 'var(--text-primary)',
+                fontSize: '0.94rem',
                 fontWeight: 500,
                 textAlign: 'right',
                 cursor: 'pointer',

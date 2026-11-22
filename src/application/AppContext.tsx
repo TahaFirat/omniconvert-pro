@@ -33,7 +33,8 @@ import { conversionGraph } from '../domain/graph/conversionGraph';
 import { inspectFile } from '../domain/inspector/magicByteInspector';
 import { networkGuard } from '../infrastructure/cloud/networkGuard';
 import { bundleFilesAsZip } from '../infrastructure/local/localArchiveConverter';
-import { imagesToPdfLocally, mergePdfsLocally } from '../infrastructure/local/localPdfConverter';
+import { mergeMixedToPdfLocally } from '../infrastructure/local/localPdfConverter';
+import { getPdfPageCount } from '../infrastructure/local/pdfPreviewEngine';
 import {
   isNativeIos,
   OmniBilling,
@@ -67,6 +68,8 @@ export interface SelectedInputItem {
   id: string;
   file: File;
   inspection: FileInspectionResult;
+  pageCount?: number;
+  thumbUrl?: string;
 }
 
 interface AppContextValue {
@@ -87,9 +90,14 @@ interface AppContextValue {
   setLocale: (locale: LocaleCode) => void;
 
   selectedInputs: SelectedInputItem[];
-  addFiles: (files: File[]) => Promise<void>;
+  addFiles: (files: File[]) => Promise<SelectedInputItem[]>;
   removeSelectedInput: (id: string) => void;
+  moveSelectedInput: (id: string, direction: 'up' | 'down') => void;
   clearSelectedInputs: () => void;
+
+  pendingPresetLaunch: ConversionPreset | null;
+  launchCustomPreset: (preset: ConversionPreset) => void;
+  consumePendingPresetLaunch: () => void;
 
   jobs: ConversionJob[];
   activeJobsCount: number;
@@ -97,7 +105,7 @@ interface AppContextValue {
     targetFormat: string;
     options: ConversionOptions;
     allowCloudOverride?: boolean;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
   cancelJob: (jobId: string) => void;
   retryJob: (jobId: string) => void;
   clearCompletedJobs: () => void;
@@ -138,12 +146,46 @@ function resolveEffectiveTheme(theme: ThemeMode): 'light' | 'dark' | 'amoled' {
   return theme;
 }
 
+const MERGEABLE_PDF_IMAGE_FORMATS = new Set(['pdf', 'png', 'jpg', 'webp', 'bmp', 'heic', 'heif', 'tiff', 'svg']);
+const PREVIEWABLE_IMG_FORMATS = new Set(['png', 'jpg', 'webp', 'bmp', 'gif', 'ico', 'svg']);
+
+async function buildSelectedItem(file: File): Promise<SelectedInputItem> {
+  const inspection = await inspectFile(file);
+  let pageCount: number | undefined;
+  let thumbUrl: string | undefined;
+
+  if (inspection.detectedFormatId === 'pdf') {
+    pageCount = await getPdfPageCount(file);
+  } else if (
+    typeof URL !== 'undefined' &&
+    typeof URL.createObjectURL === 'function' &&
+    (file.type.startsWith('image/') || PREVIEWABLE_IMG_FORMATS.has(inspection.detectedFormatId))
+  ) {
+    thumbUrl = URL.createObjectURL(file);
+  }
+
+  return {
+    id: makeId('in'),
+    file,
+    inspection,
+    pageCount,
+    thumbUrl,
+  };
+}
+
+function revokeThumb(item: SelectedInputItem): void {
+  if (item.thumbUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+    URL.revokeObjectURL(item.thumbUrl);
+  }
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('convert');
   const [settings, setSettings] = useState<PersistedSettings>(() =>
     localDb.loadSettings(detectDefaultLocale()),
   );
   const [selectedInputs, setSelectedInputs] = useState<SelectedInputItem[]>([]);
+  const [pendingPresetLaunch, setPendingPresetLaunch] = useState<ConversionPreset | null>(null);
   const [jobs, setJobs] = useState<ConversionJob[]>([]);
   const [history, setHistory] = useState<ConversionHistoryRecord[]>(() => localDb.loadHistory());
   const [customPresets, setCustomPresets] = useState<ConversionPreset[]>(() =>
@@ -171,7 +213,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     toastTimerRef.current = window.setTimeout(() => setToastMessage(null), 3400);
   }, []);
 
-  // Load live StoreKit 2 localized prices (TRY / USD / EUR) on launch
   useEffect(() => {
     void fetchStoreKitPrices().then(setStorePrices);
   }, []);
@@ -184,11 +225,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     const effective = resolveEffectiveTheme(settings.theme);
     document.documentElement.setAttribute('data-theme', effective);
+    const bgHex = effective === 'light' ? '#F2F2F7' : effective === 'amoled' ? '#000000' : '#09090B';
+    document.documentElement.style.backgroundColor = bgHex;
     const metaTheme = document.querySelector('meta[name="theme-color"]');
     if (metaTheme) {
-      metaTheme.setAttribute('content', effective === 'light' ? '#F2F2F7' : '#000000');
+      metaTheme.setAttribute('content', bgHex);
     }
     if (isNativeIos()) {
+      void OmniNativeEngine.setNativeAppearance({ theme: settings.theme }).catch(() => {});
       void StatusBar.setStyle({
         style: effective === 'light' ? Style.Light : Style.Dark,
       }).catch(() => {});
@@ -209,13 +253,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
               return new File([arr], f.name, { type: f.mime });
             });
-            const inspected = await Promise.all(
-              convertedFiles.map(async (file) => ({
-                id: makeId('in'),
-                file,
-                inspection: await inspectFile(file),
-              })),
-            );
+            const inspected = await Promise.all(convertedFiles.map(buildSelectedItem));
             setSelectedInputs((prev) => [...prev, ...inspected]);
             setActiveTab('convert');
           })
@@ -244,25 +282,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSettings((prev) => ({ ...prev, locale }));
   }, []);
 
-  const addFiles = useCallback(async (files: File[]) => {
-    if (files.length === 0) return;
-    const inspected = await Promise.all(
-      files.map(async (file) => ({
-        id: makeId('in'),
-        file,
-        inspection: await inspectFile(file),
-      })),
-    );
+  const addFiles = useCallback(async (files: File[]): Promise<SelectedInputItem[]> => {
+    if (files.length === 0) return [];
+    const inspected = await Promise.all(files.map(buildSelectedItem));
     setSelectedInputs((prev) => [...prev, ...inspected]);
     void triggerHapticImpact('light');
+    return inspected;
   }, []);
 
   const removeSelectedInput = useCallback((id: string) => {
-    setSelectedInputs((prev) => prev.filter((item) => item.id !== id));
+    setSelectedInputs((prev) => {
+      const target = prev.find((i) => i.id === id);
+      if (target) revokeThumb(target);
+      return prev.filter((item) => item.id !== id);
+    });
+  }, []);
+
+  const moveSelectedInput = useCallback((id: string, direction: 'up' | 'down') => {
+    setSelectedInputs((prev) => {
+      const idx = prev.findIndex((i) => i.id === id);
+      if (idx === -1) return prev;
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(idx, 1);
+      next.splice(swapIdx, 0, moved);
+      return next;
+    });
+    void triggerHapticImpact('light');
   }, []);
 
   const clearSelectedInputs = useCallback(() => {
-    setSelectedInputs([]);
+    setSelectedInputs((prev) => {
+      prev.forEach(revokeThumb);
+      return [];
+    });
+  }, []);
+
+  const launchCustomPreset = useCallback((preset: ConversionPreset) => {
+    setPendingPresetLaunch(preset);
+    setActiveTab('convert');
+  }, []);
+
+  const consumePendingPresetLaunch = useCallback(() => {
+    setPendingPresetLaunch(null);
   }, []);
 
   const appendHistory = useCallback((record: ConversionHistoryRecord) => {
@@ -421,215 +484,173 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       targetFormat: string;
       options: ConversionOptions;
       allowCloudOverride?: boolean;
-    }) => {
-      if (selectedInputs.length === 0) return;
+    }): Promise<boolean> => {
+      if (selectedInputs.length === 0) return false;
 
-      // Enforce generous free batch limit (3 files free, 150 files Pro)
       const batchLimit = getBatchLimit(entitlementsRef.current);
       if (selectedInputs.length > batchLimit && !entitlementsRef.current.isPro) {
         showToast(dict.queue.batchLimitReached);
         setPaywallOpen(true);
-        return;
+        return false;
       }
 
-      // Fast-path 1: Merge multiple selected PDFs into ONE PDF locally
-      const allPdfs = selectedInputs.every((i) => i.inspection.detectedFormatId === 'pdf');
-      if (targetFormat === 'pdf' && options.mergeIntoSinglePdf && allPdfs && selectedInputs.length > 1) {
-        let resv: ProTrialReservation = { usedType: 'free_standard' };
-        try {
-          const r = reserveProAccess(entitlementsRef.current, true);
-          resv = r.reservation;
-          if (r.nextState !== entitlementsRef.current) {
-            setEntitlements(r.nextState);
-            localDb.saveEntitlements(r.nextState);
-          }
-        } catch {
-          setPaywallOpen(true);
-          return;
-        }
-
-        const jobId = makeId('job');
-        const first = selectedInputs[0];
-        const plan = conversionGraph.planConversion('pdf', 'pdf', {
-          offlineOnly: settings.offlineOnlyMode,
-          inspection: first.inspection,
-        });
-        if (plan) {
-          const mergedJob: ConversionJob = {
-            id: jobId,
-            createdAt: Date.now(),
-            file: first.file,
-            inspection: first.inspection,
-            targetFormat: 'pdf',
-            plan,
-            options,
-            allowCloudOverride: false,
-            status: 'running',
-            progress: 20,
-            stageLabel: `${selectedInputs.length} PDF → PDF`,
-          };
-          setJobs((prev) => [mergedJob, ...prev]);
-          setSelectedInputs([]);
-          setActiveTab('queue');
-
-          try {
-            const start = performance.now();
-            const res = await mergePdfsLocally(
-              selectedInputs.map((i) => i.file),
-              options.stripExif,
-            );
-            const fileName = buildOutputFileName(`merged_${selectedInputs.length}_pdfs`, 'pdf');
-            setJobs((prev) =>
-              prev.map((j) =>
-                j.id === jobId
-                  ? {
-                      ...j,
-                      status: 'completed',
-                      progress: 100,
-                      completedAt: Date.now(),
-                      output: {
-                        fileName,
-                        mime: res.mime,
-                        formatId: 'pdf',
-                        sizeBytes: res.blob.size,
-                        blob: res.blob,
-                      },
-                    }
-                  : j,
-              ),
-            );
-            appendHistory({
-              id: jobId,
-              timestamp: Date.now(),
-              sourceFileName: `${selectedInputs.length} PDF`,
-              sourceFormat: 'pdf',
-              targetFormat: 'pdf',
-              sourceBytes: selectedInputs.reduce((s, x) => s + x.file.size, 0),
-              outputBytes: res.blob.size,
-              tier: 2,
-              stepsChain: ['pdf', 'pdf'],
-              status: 'completed',
-              durationMs: Math.round(performance.now() - start),
-              strippedExif: options.stripExif,
-            });
-            void triggerHapticNotification('success');
-          } catch (err) {
-            if (resv.usedType === 'daily_trial') {
-              setEntitlements((prev) => {
-                const restored = refundProAccess(prev, resv);
-                localDb.saveEntitlements(restored);
-                return restored;
-              });
-            }
-            setJobs((prev) =>
-              prev.map((j) =>
-                j.id === jobId
-                  ? {
-                      ...j,
-                      status: 'failed',
-                      errorMessage: err instanceof Error ? err.message : 'PDF merge failed',
-                      trialRefunded: resv.usedType === 'daily_trial',
-                    }
-                  : j,
-              ),
-            );
-          }
-          return;
-        }
-      }
-
-      // Fast-path 2: Merge multiple selected images into ONE PDF locally (Free!)
-      const allImages = selectedInputs.every((i) =>
-        ['png', 'jpg', 'webp', 'bmp'].includes(i.inspection.detectedFormatId),
+      // Unified Merge Fast-Path: Merges 2+ PDFs, 2+ Images, OR Mixed PDFs + Images in exact order!
+      const allMergeableToPdf = selectedInputs.every((i) =>
+        MERGEABLE_PDF_IMAGE_FORMATS.has(i.inspection.detectedFormatId),
       );
-      if (targetFormat === 'pdf' && options.mergeIntoSinglePdf && allImages && selectedInputs.length > 1) {
+      const hasAnyPdf = selectedInputs.some((i) => i.inspection.detectedFormatId === 'pdf');
+
+      if (targetFormat === 'pdf' && options.mergeIntoSinglePdf && allMergeableToPdf && selectedInputs.length > 1) {
+        // Pure Images -> PDF is 100% free; PDF Merge uses 1 daily free Pro trial (or unlimited for Pro)
+        let resv: ProTrialReservation = { usedType: 'free_standard' };
+        if (hasAnyPdf) {
+          try {
+            const r = reserveProAccess(entitlementsRef.current, true);
+            resv = r.reservation;
+            if (r.nextState !== entitlementsRef.current) {
+              setEntitlements(r.nextState);
+              localDb.saveEntitlements(r.nextState);
+            }
+          } catch {
+            setPaywallOpen(true);
+            return false;
+          }
+        }
+
+        const snapshot = [...selectedInputs];
         const jobId = makeId('job');
-        const first = selectedInputs[0];
+        const first = snapshot[0];
+        const totalBytes = snapshot.reduce((sum, item) => sum + item.file.size, 0);
         const plan = conversionGraph.planConversion(first.inspection.detectedFormatId, 'pdf', {
           offlineOnly: settings.offlineOnlyMode,
           inspection: first.inspection,
-        });
-        if (plan) {
-          const mergedJob: ConversionJob = {
-            id: jobId,
-            createdAt: Date.now(),
-            file: first.file,
-            inspection: first.inspection,
-            targetFormat: 'pdf',
-            plan,
-            options,
-            allowCloudOverride: false,
-            status: 'running',
-            progress: 15,
-            stageLabel: `${selectedInputs.length} → PDF`,
-          };
-          setJobs((prev) => [mergedJob, ...prev]);
-          setSelectedInputs([]);
-          setActiveTab('queue');
+        }) ?? {
+          sourceFormat: first.inspection.detectedFormatId,
+          targetFormat: 'pdf',
+          steps: [
+            {
+              source: first.inspection.detectedFormatId,
+              target: 'pdf',
+              tier: 2 as const,
+              engineId: 'local_pdf',
+              qualityLoss: 0,
+              latencyMsEst: 300,
+            },
+          ],
+          highestTier: 2 as const,
+          totalWeight: 20,
+          warnings: [],
+          blockedByOfflineLock: false,
+          requiresCloud: false,
+          estimatedMs: 300,
+          estimatedCreditCost: 0,
+        };
 
-          try {
-            const start = performance.now();
-            const res = await imagesToPdfLocally(
-              selectedInputs.map((item) => ({
-                blob: item.file,
-                formatId: item.inspection.detectedFormatId,
-              })),
-              options,
-            );
-            const fileName = buildOutputFileName(`merged_${selectedInputs.length}_pages`, 'pdf');
-            setJobs((prev) =>
-              prev.map((j) =>
-                j.id === jobId
-                  ? {
-                      ...j,
-                      status: 'completed',
-                      progress: 100,
-                      completedAt: Date.now(),
-                      output: {
-                        fileName,
-                        mime: res.mime,
-                        formatId: 'pdf',
-                        sizeBytes: res.blob.size,
-                        blob: res.blob,
-                      },
-                    }
-                  : j,
-              ),
-            );
-            appendHistory({
-              id: jobId,
-              timestamp: Date.now(),
-              sourceFileName: `${selectedInputs.length} images`,
-              sourceFormat: first.inspection.detectedFormatId,
-              targetFormat: 'pdf',
-              sourceBytes: selectedInputs.reduce((s, x) => s + x.file.size, 0),
-              outputBytes: res.blob.size,
-              tier: 2,
-              stepsChain: [first.inspection.detectedFormatId, 'pdf'],
-              status: 'completed',
-              durationMs: Math.round(performance.now() - start),
-              strippedExif: options.stripExif,
+        const mergedJob: ConversionJob = {
+          id: jobId,
+          createdAt: Date.now(),
+          file: new File([first.file], `${snapshot.length}_dosya`, { type: first.file.type }),
+          inspection: first.inspection,
+          targetFormat: 'pdf',
+          plan,
+          options,
+          allowCloudOverride: false,
+          status: 'running',
+          progress: 25,
+          stageLabel: `${snapshot.length} → PDF`,
+        };
+        // Preserve combined original size for accurate before/after display
+        Object.defineProperty(mergedJob.file, 'size', { value: totalBytes });
+
+        setJobs((prev) => [mergedJob, ...prev]);
+        snapshot.forEach(revokeThumb);
+        setSelectedInputs([]);
+        setActiveTab('queue');
+
+        try {
+          const start = performance.now();
+          const res = await mergeMixedToPdfLocally(
+            snapshot.map((item) => ({
+              blob: item.file,
+              formatId: item.inspection.detectedFormatId,
+            })),
+            options,
+          );
+          const fileName = buildOutputFileName(`birlesik_${snapshot.length}_dosya`, 'pdf');
+          setJobs((prev) =>
+            prev.map((j) =>
+              j.id === jobId
+                ? {
+                    ...j,
+                    status: 'completed',
+                    progress: 100,
+                    completedAt: Date.now(),
+                    output: {
+                      fileName,
+                      mime: res.mime,
+                      formatId: 'pdf',
+                      sizeBytes: res.blob.size,
+                      blob: res.blob,
+                    },
+                  }
+                : j,
+            ),
+          );
+          appendHistory({
+            id: jobId,
+            timestamp: Date.now(),
+            sourceFileName: `${snapshot.length} dosya (${hasAnyPdf ? 'PDF' : 'Görsel'})`,
+            sourceFormat: hasAnyPdf ? 'pdf' : first.inspection.detectedFormatId,
+            targetFormat: 'pdf',
+            sourceBytes: totalBytes,
+            outputBytes: res.blob.size,
+            tier: 2,
+            stepsChain: [hasAnyPdf ? 'pdf' : first.inspection.detectedFormatId, 'pdf'],
+            status: 'completed',
+            durationMs: Math.round(performance.now() - start),
+            strippedExif: options.stripExif,
+          });
+          setEntitlements((prev) => {
+            const next: EntitlementState = {
+              ...prev,
+              completedLocalConversions: prev.completedLocalConversions + 1,
+            };
+            localDb.saveEntitlements(next);
+            if (shouldTriggerNaturalReviewPrompt(next)) {
+              setReviewPromptVisible(true);
+            }
+            return next;
+          });
+          void triggerHapticNotification('success');
+          return true;
+        } catch (err) {
+          if (resv.usedType === 'daily_trial') {
+            setEntitlements((prev) => {
+              const restored = refundProAccess(prev, resv);
+              localDb.saveEntitlements(restored);
+              return restored;
             });
-            void triggerHapticNotification('success');
-          } catch (err) {
-            setJobs((prev) =>
-              prev.map((j) =>
-                j.id === jobId
-                  ? {
-                      ...j,
-                      status: 'failed',
-                      errorMessage: err instanceof Error ? err.message : 'PDF merge failed',
-                    }
-                  : j,
-              ),
-            );
           }
-          return;
+          setJobs((prev) =>
+            prev.map((j) =>
+              j.id === jobId
+                ? {
+                    ...j,
+                    status: 'failed',
+                    errorMessage: err instanceof Error ? err.message : 'PDF birleştirme başarısız oldu',
+                    trialRefunded: resv.usedType === 'daily_trial',
+                  }
+                : j,
+            ),
+          );
+          void triggerHapticNotification('error');
+          return true;
         }
       }
 
+      const snapshot = [...selectedInputs];
       const newJobs: ConversionJob[] = [];
-      for (const item of selectedInputs) {
+      for (const item of snapshot) {
         const plan = conversionGraph.planConversion(
           item.inspection.detectedFormatId,
           targetFormat,
@@ -655,10 +676,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
 
-      if (newJobs.length === 0) return;
+      if (newJobs.length === 0) {
+        showToast(dict.targetPicker.noResults);
+        return false;
+      }
 
       const batchSize = newJobs.length;
       setJobs((prev) => [...newJobs, ...prev]);
+      snapshot.forEach(revokeThumb);
       setSelectedInputs([]);
       setActiveTab('queue');
 
@@ -667,15 +692,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const batch = newJobs.slice(i, i + concurrency);
         await Promise.all(batch.map((job) => executeJobInternal(job, batchSize)));
       }
+      return true;
     },
-    [appendHistory, dict.queue.batchLimitReached, executeJobInternal, selectedInputs, settings.offlineOnlyMode, showToast],
+    [
+      appendHistory,
+      dict.queue.batchLimitReached,
+      dict.targetPicker.noResults,
+      executeJobInternal,
+      selectedInputs,
+      settings.offlineOnlyMode,
+      showToast,
+    ],
   );
 
   const cancelJob = useCallback((jobId: string) => {
     const ctrl = abortMapRef.current.get(jobId);
     if (ctrl) ctrl.abort();
     setJobs((prev) =>
-      prev.map((j) => (j.id === jobId && (j.status === 'queued' || j.status === 'running') ? { ...j, status: 'cancelled' } : j)),
+      prev.map((j) =>
+        j.id === jobId && (j.status === 'queued' || j.status === 'running')
+          ? { ...j, status: 'cancelled' }
+          : j,
+      ),
     );
   }, []);
 
@@ -809,11 +847,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setHistory([]);
     setCustomPresets([]);
     setJobs([]);
-    setSelectedInputs([]);
+    clearSelectedInputs();
     setEntitlements(createInitialEntitlementState());
     setCacheBytes(0);
     showToast(dict.settings.cacheCleared);
-  }, [dict.settings.cacheCleared, showToast]);
+  }, [clearSelectedInputs, dict.settings.cacheCleared, showToast]);
 
   const dismissReviewPrompt = useCallback((rateNow: boolean) => {
     setReviewPromptVisible(false);
@@ -850,7 +888,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     selectedInputs,
     addFiles,
     removeSelectedInput,
+    moveSelectedInput,
     clearSelectedInputs,
+    pendingPresetLaunch,
+    launchCustomPreset,
+    consumePendingPresetLaunch,
     jobs,
     activeJobsCount,
     enqueueAndRun,

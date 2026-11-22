@@ -4,12 +4,29 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#09090B" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>OmniConvert Pro</title>
+    <title>OmniConvert</title>
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('omniconvert_settings_v1');
+          var theme = raw ? JSON.parse(raw).theme : 'system';
+          var effective =
+            theme === 'light' || theme === 'dark' || theme === 'amoled'
+              ? theme
+              : window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark';
+          document.documentElement.setAttribute('data-theme', effective);
+          var bg = effective === 'light' ? '#F2F2F7' : effective === 'amoled' ? '#000000' : '#09090B';
+          document.documentElement.style.backgroundColor = bg;
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

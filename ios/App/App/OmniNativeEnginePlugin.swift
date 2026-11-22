@@ -7,6 +7,30 @@ import UniformTypeIdentifiers
 import PDFKit
 import Vision
 import AVFoundation
+import QuickLook
+
+private final class OmniQuickLookCoordinator: NSObject, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
+    let fileURL: URL
+    var onDismiss: (() -> Void)?
+
+    init(fileURL: URL, onDismiss: (() -> Void)? = nil) {
+        self.fileURL = fileURL
+        self.onDismiss = onDismiss
+    }
+
+    func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
+        return 1
+    }
+
+    func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+        return fileURL as QLPreviewItem
+    }
+
+    func previewControllerDidDismiss(_ controller: QLPreviewController) {
+        try? FileManager.default.removeItem(at: fileURL)
+        onDismiss?()
+    }
+}
 
 @objc(OmniNativeEnginePlugin)
 public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
@@ -14,14 +38,19 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "OmniNativeEngine"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "isAvailable", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setNativeAppearance", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "convertImage", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "recognizeTextOcr", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "convertMedia", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "videoToGif", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pdfToImages", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "renderPdfPreviewPage", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openQuickLook", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "cleanupTempWorkspace", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getSharedInboxFiles", returnType: CAPPluginReturnPromise)
     ]
+
+    private var activeQuickLookCoordinator: OmniQuickLookCoordinator?
 
     @objc public func isAvailable(_ call: CAPPluginCall) {
         call.resolve([
@@ -31,8 +60,61 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
         ])
     }
 
+    /// Keeps native UIWindow, WKWebView, and UIScrollView background synced with in-app Light/Dark/AMOLED theme.
+    @objc public func setNativeAppearance(_ call: CAPPluginCall) {
+        let mode = call.getString("theme") ?? "system"
+        DispatchQueue.main.async {
+            if let mainVC = self.bridge?.viewController as? MainViewController {
+                mainVC.applyThemeMode(mode)
+            }
+            call.resolve(["applied": mode])
+        }
+    }
+
+    /// Native Apple QuickLook (QLPreviewController) for crisp pinch-zoom preview of PDF, DOCX, XLSX, HEIC, MP4, M4A, ZIP.
+    @objc public func openQuickLook(_ call: CAPPluginCall) {
+        guard let base64 = call.getString("base64Data"),
+              let fileData = Data(base64Encoded: base64) else {
+            call.reject("Invalid base64 data for QuickLook")
+            return
+        }
+        let rawName = call.getString("fileName") ?? "preview.bin"
+        let safeName = rawName.replacingOccurrences(of: "/", with: "_")
+        let previewDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("omniconvert_ql", isDirectory: true)
+        try? FileManager.default.createDirectory(at: previewDir, withIntermediateDirectories: true)
+        let fileURL = previewDir.appendingPathComponent("\(UUID().uuidString)_\(safeName)")
+
+        do {
+            try fileData.write(to: fileURL, options: .atomic)
+        } catch {
+            call.reject("Failed to stage preview file: \(error.localizedDescription)")
+            return
+        }
+
+        DispatchQueue.main.async {
+            guard let hostVC = self.bridge?.viewController else {
+                try? FileManager.default.removeItem(at: fileURL)
+                call.reject("View controller unavailable")
+                return
+            }
+
+            let coordinator = OmniQuickLookCoordinator(fileURL: fileURL) { [weak self] in
+                self?.activeQuickLookCoordinator = nil
+            }
+            self.activeQuickLookCoordinator = coordinator
+
+            let ql = QLPreviewController()
+            ql.dataSource = coordinator
+            ql.delegate = coordinator
+            hostVC.present(ql, animated: true) {
+                call.resolve(["presented": true])
+            }
+        }
+    }
+
     /// Tier 1 Hardware Image Conversion via Apple ImageIO / CoreImage
-    /// Supports HEIC, HEIF, DNG/CR2/NEF/ARW RAW, PNG, JPEG, TIFF, BMP, GIF with real EXIF/GPS stripping.
+    /// Bakes EXIF orientation BEFORE stripping EXIF/GPS so portrait iPhone photos never rotate sideways.
     @objc public func convertImage(_ call: CAPPluginCall) {
         guard let base64 = call.getString("base64Data"),
               let inputData = Data(base64Encoded: base64) else {
@@ -51,17 +133,20 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
                 return
             }
 
-            let cgImage: CGImage?
-            if let maxDim = maxDim, maxDim > 0 {
-                let thumbOpts: [CFString: Any] = [
-                    kCGImageSourceCreateThumbnailFromImageAlways: true,
-                    kCGImageSourceCreateThumbnailWithTransform: true,
-                    kCGImageSourceThumbnailMaxPixelSize: maxDim
-                ]
-                cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOpts as CFDictionary)
-            } else {
-                cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
-            }
+            // Read intrinsic pixel dimensions to bake EXIF orientation accurately even when not resizing
+            let propsDict = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+            let srcW = propsDict?[kCGImagePropertyPixelWidth] as? Int ?? 4096
+            let srcH = propsDict?[kCGImagePropertyPixelHeight] as? Int ?? 4096
+            let intrinsicMax = max(srcW, srcH, 1)
+            let effectiveMax = (maxDim != nil && maxDim! > 0) ? min(maxDim!, intrinsicMax) : intrinsicMax
+
+            let thumbOpts: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: effectiveMax
+            ]
+            let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOpts as CFDictionary)
+                ?? CGImageSourceCreateImageAtIndex(source, 0, nil)
 
             guard let decoded = cgImage else {
                 call.reject("ImageIO failed to rasterize frame")
@@ -107,6 +192,7 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
                 props[kCGImagePropertyGPSDictionary] = kCFNull
                 props[kCGImagePropertyTIFFDictionary] = kCFNull
                 props[kCGImagePropertyIPTCDictionary] = kCFNull
+                props[kCGImagePropertyOrientation] = 1
             }
 
             CGImageDestinationAddImage(destination, decoded, props as CFDictionary)
@@ -204,6 +290,53 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
             call.resolve([
                 "text": pageTexts.joined(separator: "\n\n---\n\n"),
                 "confidence": avgConfidence
+            ])
+        }
+    }
+
+    /// Fast hardware PDFKit single-page renderer for inline multi-page preview (1-based pageNumber)
+    @objc public func renderPdfPreviewPage(_ call: CAPPluginCall) {
+        guard let base64 = call.getString("base64Data"),
+              let inputData = Data(base64Encoded: base64),
+              let pdfDoc = PDFDocument(data: inputData),
+              pdfDoc.pageCount > 0 else {
+            call.reject("PDFKit could not open PDF document")
+            return
+        }
+
+        let requestedPage = max(1, min(pdfDoc.pageCount, call.getInt("pageNumber") ?? 1))
+        let maxWidth = CGFloat(max(320, min(1800, call.getInt("maxWidth") ?? 1100)))
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let page = pdfDoc.page(at: requestedPage - 1) else {
+                call.reject("Requested PDF page out of range")
+                return
+            }
+            let bounds = page.bounds(for: .mediaBox)
+            let safeW = max(bounds.width, 1)
+            let safeH = max(bounds.height, 1)
+            let scale = min(maxWidth / safeW, 2.5)
+            let size = CGSize(width: safeW * scale, height: safeH * scale)
+            let renderer = UIGraphicsImageRenderer(size: size)
+            let image = renderer.image { ctx in
+                UIColor.white.set()
+                ctx.fill(CGRect(origin: .zero, size: size))
+                ctx.cgContext.translateBy(x: 0, y: size.height)
+                ctx.cgContext.scaleBy(x: scale, y: -scale)
+                page.draw(with: .mediaBox, to: ctx.cgContext)
+            }
+
+            guard let jpgData = image.jpegData(compressionQuality: 0.86) else {
+                call.reject("Failed to encode PDF preview page")
+                return
+            }
+
+            call.resolve([
+                "base64Data": jpgData.base64EncodedString(),
+                "mime": "image/jpeg",
+                "pageCount": pdfDoc.pageCount,
+                "width": Int(size.width),
+                "height": Int(size.height)
             ])
         }
     }
@@ -494,7 +627,7 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
             var removedDirs = 0
 
             if let items = try? fm.contentsOfDirectory(at: tmp, includingPropertiesForKeys: [.fileSizeKey]) {
-                for url in items where url.lastPathComponent.hasPrefix("job_") || url.lastPathComponent.hasPrefix("omniconvert_share_") {
+                for url in items where url.lastPathComponent.hasPrefix("job_") || url.lastPathComponent.hasPrefix("omniconvert_share_") || url.lastPathComponent.hasPrefix("omniconvert_ql") {
                     if let attrs = try? fm.attributesOfItem(atPath: url.path),
                        let sz = attrs[.size] as? Int {
                         cleanedBytes += sz

@@ -1,8 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
   Camera,
-  ChevronRight,
   ClipboardPaste,
+  Eye,
+  FileArchive,
   FilePlus2,
   FileText,
   Film,
@@ -10,31 +13,40 @@ import {
   Layers,
   Music,
   ScanText,
+  Scissors,
   X,
 } from 'lucide-react';
-import { useApp } from '../../application/AppContext';
+import { useApp, type SelectedInputItem } from '../../application/AppContext';
 import { interpolate } from '../../core/i18n';
 import type { ConversionOptions } from '../../domain/entities/job';
-import type { ConversionPreset } from '../../domain/entities/preset';
-import { BUILT_IN_PRESETS } from '../../domain/presets/builtInPresets';
+import {
+  GUIDED_TOOLS,
+  type GuidedToolId,
+  type ToolCategory,
+} from '../../domain/tools/toolCatalog';
 import { readClipboardContent } from '../../infrastructure/native/omniNativeBridge';
+import { FilePreviewModal, type PreviewTarget } from '../components/FilePreviewModal';
 import { formatFileSize } from '../components/formatBytes';
-import { TargetPickerSheet } from './TargetPickerSheet';
+import { ToolWorkspaceSheet } from './ToolWorkspaceSheet';
 
-function getPresetIcon(presetId: string) {
-  switch (presetId) {
-    case 'preset_whatsapp_shrink':
-      return <ImageIcon size={18} strokeWidth={1.9} />;
-    case 'preset_edevlet_pdf':
-      return <FileText size={18} strokeWidth={1.9} />;
-    case 'preset_pdf_studio':
-      return <Layers size={18} strokeWidth={1.9} />;
-    case 'preset_video_audio':
-      return <Music size={18} strokeWidth={1.9} />;
-    case 'preset_video_gif':
-      return <Film size={18} strokeWidth={1.9} />;
+function renderToolIcon(toolId: GuidedToolId) {
+  switch (toolId) {
+    case 'pdf-merge':
+      return <Layers size={20} strokeWidth={2} />;
+    case 'images-to-pdf':
+      return <FileText size={20} strokeWidth={2} />;
+    case 'pdf-tools':
+      return <Scissors size={20} strokeWidth={2} />;
+    case 'image-convert':
+      return <ImageIcon size={20} strokeWidth={2} />;
+    case 'video-audio':
+      return <Music size={20} strokeWidth={2} />;
+    case 'video-compress':
+      return <Film size={20} strokeWidth={2} />;
+    case 'ocr-extract':
+      return <ScanText size={20} strokeWidth={2} />;
     default:
-      return <ScanText size={18} strokeWidth={1.9} />;
+      return <FileArchive size={20} strokeWidth={2} />;
   }
 }
 
@@ -44,7 +56,10 @@ export const ConvertScreen: React.FC = () => {
     selectedInputs,
     addFiles,
     removeSelectedInput,
+    moveSelectedInput,
     clearSelectedInputs,
+    pendingPresetLaunch,
+    consumePendingPresetLaunch,
     showToast,
   } = useApp();
 
@@ -52,11 +67,29 @@ export const ConvertScreen: React.FC = () => {
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [presetTarget, setPresetTarget] = useState<string | undefined>(undefined);
-  const [presetOptions, setPresetOptions] = useState<Partial<ConversionOptions> | undefined>(
-    undefined,
-  );
+  const [category, setCategory] = useState<ToolCategory>('all');
+  const [activeWorkspace, setActiveWorkspace] = useState<{
+    toolId: GuidedToolId;
+    target?: string;
+    options?: Partial<ConversionOptions>;
+  } | null>(null);
+  const [previewItem, setPreviewItem] = useState<PreviewTarget | null>(null);
+
+  // If user tapped "Use" on a saved custom preset in History, launch workspace with it immediately
+  useEffect(() => {
+    if (!pendingPresetLaunch) return;
+    setActiveWorkspace({
+      toolId: 'universal',
+      target: pendingPresetLaunch.targetFormat,
+      options: pendingPresetLaunch.options,
+    });
+    consumePendingPresetLaunch();
+  }, [pendingPresetLaunch, consumePendingPresetLaunch]);
+
+  const visibleTools = useMemo(() => {
+    if (category === 'all') return GUIDED_TOOLS;
+    return GUIDED_TOOLS.filter((t) => t.category === category);
+  }, [category]);
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const list = e.target.files ? Array.from(e.target.files) : [];
@@ -83,20 +116,26 @@ export const ConvertScreen: React.FC = () => {
     showToast(dict.convert.pasteSuccess);
   };
 
-  const handleApplyBuiltInPreset = (preset: ConversionPreset) => {
-    setPresetTarget(preset.targetFormat);
-    setPresetOptions(preset.options);
-    if (selectedInputs.length > 0) {
-      setPickerOpen(true);
-    } else if (preset.id === 'preset_video_audio' || preset.id === 'preset_video_gif') {
-      mediaInputRef.current?.click();
-    } else {
-      fileInputRef.current?.click();
-    }
+  const openInputPreview = (item: SelectedInputItem) => {
+    setPreviewItem({
+      fileName: item.file.name,
+      mime: item.file.type || 'application/octet-stream',
+      formatId: item.inspection.detectedFormatId,
+      sizeBytes: item.file.size,
+      blob: item.file,
+    });
   };
 
+  const categories: Array<{ id: ToolCategory; label: string }> = [
+    { id: 'all', label: dict.convert.catAll },
+    { id: 'pdf', label: dict.convert.catPdf },
+    { id: 'image', label: dict.convert.catImage },
+    { id: 'media', label: dict.convert.catMedia },
+    { id: 'doc', label: dict.convert.catDoc },
+  ];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <input
         ref={fileInputRef}
         data-testid="file-input"
@@ -122,7 +161,7 @@ export const ConvertScreen: React.FC = () => {
         onChange={(e) => void handleFileInputChange(e)}
       />
 
-      {/* Primary Picker Surface */}
+      {/* 1. Primary Universal Picker Surface */}
       <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <button
           type="button"
@@ -131,41 +170,40 @@ export const ConvertScreen: React.FC = () => {
           className="card"
           style={{
             width: '100%',
-            padding: '28px 20px',
+            padding: '22px 18px',
             border: '1px dashed var(--separator-strong)',
             display: 'flex',
-            flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
-            textAlign: 'center',
+            gap: 14,
+            textAlign: 'left',
           }}
         >
           <div
             style={{
-              width: 52,
-              height: 52,
-              borderRadius: '50%',
+              width: 48,
+              height: 48,
+              borderRadius: 14,
               background: 'var(--accent-soft)',
               color: 'var(--accent)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              flexShrink: 0,
             }}
           >
             <FilePlus2 size={24} strokeWidth={1.9} />
           </div>
-          <div>
-            <div style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
               {dict.convert.dropTitle}
             </div>
-            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 4 }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 3, lineHeight: 1.35 }}>
               {dict.convert.dropSubtitle}
             </div>
           </div>
         </button>
 
-        {/* Compact 3-Column Strip */}
+        {/* Clean 3-Source Action Strip */}
         <div
           style={{
             display: 'grid',
@@ -178,18 +216,17 @@ export const ConvertScreen: React.FC = () => {
             onClick={() => mediaInputRef.current?.click()}
             className="card"
             style={{
-              padding: '12px 8px',
-              border: 'none',
+              padding: '11px 8px',
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
-              gap: 6,
-              fontSize: '0.78rem',
-              fontWeight: 500,
+              justifyContent: 'center',
+              gap: 7,
+              fontSize: '0.82rem',
+              fontWeight: 600,
               color: 'var(--text-primary)',
             }}
           >
-            <ImageIcon size={19} strokeWidth={1.8} color="var(--accent)" />
+            <ImageIcon size={17} strokeWidth={1.9} color="var(--accent)" style={{ flexShrink: 0 }} />
             <span className="truncate">{dict.convert.pickMedia}</span>
           </button>
 
@@ -198,18 +235,17 @@ export const ConvertScreen: React.FC = () => {
             onClick={() => cameraInputRef.current?.click()}
             className="card"
             style={{
-              padding: '12px 8px',
-              border: 'none',
+              padding: '11px 8px',
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
-              gap: 6,
-              fontSize: '0.78rem',
-              fontWeight: 500,
+              justifyContent: 'center',
+              gap: 7,
+              fontSize: '0.82rem',
+              fontWeight: 600,
               color: 'var(--text-primary)',
             }}
           >
-            <Camera size={19} strokeWidth={1.8} color="var(--accent)" />
+            <Camera size={17} strokeWidth={1.9} color="var(--accent)" style={{ flexShrink: 0 }} />
             <span className="truncate">{dict.convert.scanCamera}</span>
           </button>
 
@@ -218,24 +254,23 @@ export const ConvertScreen: React.FC = () => {
             onClick={() => void handlePasteClipboard()}
             className="card"
             style={{
-              padding: '12px 8px',
-              border: 'none',
+              padding: '11px 8px',
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
-              gap: 6,
-              fontSize: '0.78rem',
-              fontWeight: 500,
+              justifyContent: 'center',
+              gap: 7,
+              fontSize: '0.82rem',
+              fontWeight: 600,
               color: 'var(--text-primary)',
             }}
           >
-            <ClipboardPaste size={19} strokeWidth={1.8} color="var(--accent)" />
+            <ClipboardPaste size={17} strokeWidth={1.9} color="var(--accent)" style={{ flexShrink: 0 }} />
             <span className="truncate">{dict.convert.pasteClipboard}</span>
           </button>
         </div>
       </section>
 
-      {/* Selected Files */}
+      {/* 2. Selected Files (with Instant Preview & Reorder) */}
       {selectedInputs.length > 0 && (
         <section>
           <div
@@ -243,21 +278,20 @@ export const ConvertScreen: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: '0 14px 8px 14px',
+              padding: '0 6px 8px 6px',
+              gap: 8,
             }}
           >
             <span className="section-header" style={{ padding: 0, margin: 0 }}>
               {dict.convert.selectedFiles} ({selectedInputs.length})
             </span>
-            <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 14 }}>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 style={{
-                  border: 'none',
-                  background: 'transparent',
                   color: 'var(--accent)',
-                  fontSize: '0.8rem',
+                  fontSize: '0.82rem',
                   fontWeight: 600,
                   padding: 0,
                 }}
@@ -268,10 +302,8 @@ export const ConvertScreen: React.FC = () => {
                 type="button"
                 onClick={clearSelectedInputs}
                 style={{
-                  border: 'none',
-                  background: 'transparent',
                   color: 'var(--text-muted)',
-                  fontSize: '0.8rem',
+                  fontSize: '0.82rem',
                   fontWeight: 500,
                   padding: 0,
                 }}
@@ -282,13 +314,26 @@ export const ConvertScreen: React.FC = () => {
           </div>
 
           <div className="ios-group">
-            {selectedInputs.map((item) => (
-              <div key={item.id} className="ios-row">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+            {selectedInputs.map((item, idx) => (
+              <div key={item.id} className="ios-row" style={{ gap: 10 }}>
+                {item.thumbUrl ? (
+                  <img
+                    src={item.thumbUrl}
+                    alt={item.file.name}
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 9,
+                      objectFit: 'cover',
+                      flexShrink: 0,
+                      border: '0.5px solid var(--separator)',
+                    }}
+                  />
+                ) : (
                   <div
                     style={{
-                      width: 38,
-                      height: 38,
+                      width: 40,
+                      height: 40,
                       borderRadius: 10,
                       background: 'var(--bg-fill)',
                       color: 'var(--text-primary)',
@@ -296,54 +341,79 @@ export const ConvertScreen: React.FC = () => {
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontWeight: 700,
-                      fontSize: '0.68rem',
-                      letterSpacing: '0.02em',
+                      fontSize: '0.7rem',
                       flexShrink: 0,
                     }}
                   >
                     {item.inspection.detectedFormatId.toUpperCase().slice(0, 4)}
                   </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="truncate" style={{ fontWeight: 500, fontSize: '0.92rem' }}>
-                      {item.file.name}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
-                      <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
-                        {formatFileSize(item.file.size)}
-                      </span>
-                      {item.inspection.isExtensionMismatch && (
-                        <span className="tag tag-warn">
-                          .{item.inspection.detectedFormatId.toUpperCase()}
-                        </span>
-                      )}
-                      {item.inspection.isEncrypted && (
-                        <span className="tag tag-danger">{dict.convert.encryptedHint}</span>
-                      )}
-                      {item.inspection.hasDrm && (
-                        <span className="tag tag-danger">{dict.convert.drmHint}</span>
-                      )}
-                    </div>
+                )}
+
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="truncate" style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                    {item.file.name}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                    <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                      {formatFileSize(item.file.size)}
+                      {item.pageCount ? ` • ${interpolate(dict.convert.pagesLabel, { count: item.pageCount })}` : ''}
+                    </span>
+                    {item.inspection.isExtensionMismatch && (
+                      <span className="tag tag-warn">.{item.inspection.detectedFormatId.toUpperCase()}</span>
+                    )}
+                    {item.inspection.isEncrypted && (
+                      <span className="tag tag-danger">{dict.convert.encryptedHint}</span>
+                    )}
+                    {item.inspection.hasDrm && (
+                      <span className="tag tag-danger">{dict.convert.drmHint}</span>
+                    )}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  aria-label="Remove"
-                  onClick={() => removeSelectedInput(item.id)}
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: '50%',
-                    border: 'none',
-                    background: 'var(--bg-fill)',
-                    color: 'var(--text-muted)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <X size={14} />
-                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label={dict.queue.preview}
+                    onClick={() => openInputPreview(item)}
+                    style={{ width: 30, height: 30, minWidth: 30, minHeight: 30 }}
+                  >
+                    <Eye size={14} />
+                  </button>
+                  {selectedInputs.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label="Move up"
+                        disabled={idx === 0}
+                        onClick={() => moveSelectedInput(item.id, 'up')}
+                        style={{ width: 28, height: 28, minWidth: 28, minHeight: 28 }}
+                      >
+                        <ArrowUp size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label="Move down"
+                        disabled={idx === selectedInputs.length - 1}
+                        onClick={() => moveSelectedInput(item.id, 'down')}
+                        style={{ width: 28, height: 28, minWidth: 28, minHeight: 28 }}
+                      >
+                        <ArrowDown size={13} />
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Remove"
+                    onClick={() => removeSelectedInput(item.id)}
+                    style={{ width: 28, height: 28, minWidth: 28, minHeight: 28 }}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -352,12 +422,8 @@ export const ConvertScreen: React.FC = () => {
             type="button"
             className="btn btn-primary"
             data-testid="choose-target-btn"
-            style={{ width: '100%', marginTop: 12 }}
-            onClick={() => {
-              setPresetTarget(undefined);
-              setPresetOptions(undefined);
-              setPickerOpen(true);
-            }}
+            style={{ width: '100%', marginTop: 10 }}
+            onClick={() => setActiveWorkspace({ toolId: 'universal' })}
           >
             {selectedInputs.length === 1
               ? dict.convert.chooseTarget
@@ -366,59 +432,78 @@ export const ConvertScreen: React.FC = () => {
         </section>
       )}
 
-      {/* Quick Tools (Inset Grouped) */}
-      <section>
-        <h2 className="section-header">{dict.convert.presetsTitle}</h2>
-        <div className="ios-group">
-          {BUILT_IN_PRESETS.map((preset) => {
-            const copy = preset.nameKey ? dict.presets[preset.nameKey] : null;
+      {/* 3. Zero-Confusion Guided Tool Grid (iLovePDF + Media Converter inspired) */}
+      <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="pill-strip" role="tablist" aria-label={dict.convert.presetsTitle}>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              role="tab"
+              aria-selected={category === cat.id}
+              className={`filter-pill${category === cat.id ? ' is-active' : ''}`}
+              onClick={() => setCategory(cat.id)}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="tools-grid">
+          {visibleTools.map((tool) => {
+            const copy = dict.tools[tool.copyKey];
             return (
               <button
-                key={preset.id}
+                key={tool.id}
                 type="button"
-                className="ios-row ios-row-interactive"
-                onClick={() => handleApplyBuiltInPreset(preset)}
+                data-testid={`tool-card-${tool.id}`}
+                className="tool-card"
+                onClick={() => setActiveWorkspace({ toolId: tool.id })}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+                <div
+                  className="tool-icon-box"
+                  style={{ background: tool.accentBg, color: tool.accentColor }}
+                >
+                  {renderToolIcon(tool.id)}
+                </div>
+                <div style={{ minWidth: 0, width: '100%' }}>
                   <div
                     style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 9,
-                      background: 'var(--accent-soft)',
-                      color: 'var(--accent)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
+                      fontWeight: 700,
+                      fontSize: '0.92rem',
+                      lineHeight: 1.25,
+                      color: 'var(--text-primary)',
                     }}
                   >
-                    {getPresetIcon(preset.id)}
+                    {copy.title}
                   </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div className="truncate" style={{ fontWeight: 500, fontSize: '0.92rem' }}>
-                      {copy?.name ?? preset.customName}
-                    </div>
-                    <div className="truncate" style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: 1 }}>
-                      {copy?.desc ?? preset.description}
-                    </div>
+                  <div
+                    style={{
+                      fontSize: '0.76rem',
+                      lineHeight: 1.35,
+                      color: 'var(--text-muted)',
+                      marginTop: 4,
+                    }}
+                  >
+                    {copy.subtitle}
                   </div>
                 </div>
-                <ChevronRight size={17} color="var(--text-muted)" style={{ flexShrink: 0 }} />
               </button>
             );
           })}
         </div>
       </section>
 
-      {pickerOpen && selectedInputs.length > 0 && (
-        <TargetPickerSheet
-          inputs={selectedInputs}
-          initialTarget={presetTarget}
-          initialOptions={presetOptions}
-          onClose={() => setPickerOpen(false)}
+      {activeWorkspace && (
+        <ToolWorkspaceSheet
+          toolId={activeWorkspace.toolId}
+          initialTarget={activeWorkspace.target}
+          initialOptions={activeWorkspace.options}
+          onClose={() => setActiveWorkspace(null)}
         />
       )}
+
+      <FilePreviewModal target={previewItem} onClose={() => setPreviewItem(null)} />
     </div>
   );
 };

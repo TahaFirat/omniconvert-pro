@@ -105,8 +105,9 @@ export const PaywallModal: React.FC = () => {
                   gap: 12,
                   padding: '13px 15px',
                   borderRadius: 'var(--radius-md)',
-                  border: `1.5px solid ${active ? 'var(--accent)' : 'transparent'}`,
+                  border: `1.5px solid ${active ? 'var(--accent)' : 'var(--separator)'}`,
                   background: active ? 'var(--accent-soft)' : 'var(--sheet-card)',
+                  color: 'var(--text-primary)',
                   textAlign: 'left',
                 }}
               >

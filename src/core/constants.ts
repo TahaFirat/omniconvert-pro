@@ -75,6 +75,12 @@ export const OPEN_SOURCE_NOTICES: readonly OpenSourceNotice[] = [
     purpose: 'On-device PDF creation, merging, splitting, page rotation, and metadata removal',
   },
   {
+    name: 'PDF.js (pdfjs-dist)',
+    license: 'Apache-2.0 License',
+    url: 'https://github.com/mozilla/pdf.js',
+    purpose: 'On-device multi-page PDF preview rendering and text extraction',
+  },
+  {
     name: 'js-yaml',
     license: 'MIT License',
     url: 'https://github.com/nodeca/js-yaml',
