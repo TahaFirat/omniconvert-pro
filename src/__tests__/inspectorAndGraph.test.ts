@@ -87,18 +87,22 @@ describe('Dijkstra Multi-Hop Conversion Graph (Local-First Invariant)', () => {
     expect(plan!.warnings).toContain('WARN_RASTERIZE');
   });
 
-  it('hard-prunes Tier 3 edges when offlineOnly is true and surfaces BLOCK_OFFLINE_LOCK', () => {
-    const lockedPlan = conversionGraph.planConversion('docx', 'png', { offlineOnly: true });
+  it('resolves DOCX -> PDF locally on-device and hard-prunes Tier 3 edges (DWG -> PNG) when offlineOnly is true', () => {
+    const docxPlan = conversionGraph.planConversion('docx', 'pdf', { offlineOnly: true });
+    expect(docxPlan).not.toBeNull();
+    expect(docxPlan!.requiresCloud).toBe(false);
+    expect(docxPlan!.blockedByOfflineLock).toBe(false);
+
+    const lockedPlan = conversionGraph.planConversion('dwg', 'png', { offlineOnly: true });
     expect(lockedPlan).not.toBeNull();
     expect(lockedPlan!.blockedByOfflineLock).toBe(true);
     expect(lockedPlan!.blockedReason).toBe('BLOCK_OFFLINE_LOCK');
     expect(lockedPlan!.warnings).toContain('BLOCK_OFFLINE_LOCK');
 
-    const hybridPlan = conversionGraph.planConversion('docx', 'png', { offlineOnly: false });
+    const hybridPlan = conversionGraph.planConversion('dwg', 'png', { offlineOnly: false });
     expect(hybridPlan).not.toBeNull();
     expect(hybridPlan!.blockedByOfflineLock).toBe(false);
     expect(hybridPlan!.requiresCloud).toBe(true);
-    expect(hybridPlan!.steps.map((s) => s.target)).toEqual(['pdf', 'png']);
   });
 
   it('supports over 1,000+ reachable conversion pairs across all 11 format categories', () => {

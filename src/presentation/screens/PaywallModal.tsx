@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { useApp } from '../../application/AppContext';
-import { APP_CONFIG } from '../../core/constants';
-import { CREDIT_PACKS, SUBSCRIPTION_PRODUCTS } from '../../domain/entities/billing';
+import { APP_CONFIG, MONETIZATION_CONFIG } from '../../core/constants';
+import { PRO_PLAN_PRODUCTS } from '../../domain/entities/billing';
 
 export const PaywallModal: React.FC = () => {
   const {
@@ -11,20 +11,28 @@ export const PaywallModal: React.FC = () => {
     setPaywallOpen,
     buyProduct,
     restorePurchases,
-    entitlements,
+    storePrices,
   } = useApp();
 
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string>(MONETIZATION_CONFIG.PRODUCTS.PRO_YEARLY);
+  const [busy, setBusy] = useState(false);
 
   if (!paywallOpen) return null;
 
-  const handleBuy = async (productId: string) => {
-    setBusyId(productId);
+  const features = [
+    dict.paywall.featureBatch,
+    dict.paywall.featurePdf,
+    dict.paywall.featureMedia,
+    dict.paywall.featureOcrRaw,
+  ];
+
+  const handleContinue = async () => {
+    setBusy(true);
     try {
-      const ok = await buyProduct(productId);
+      const ok = await buyProduct(selectedId);
       if (ok) setPaywallOpen(false);
     } finally {
-      setBusyId(null);
+      setBusy(false);
     }
   };
 
@@ -35,7 +43,7 @@ export const PaywallModal: React.FC = () => {
 
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: '1.22rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
+            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
               {dict.paywall.title}
             </h2>
             <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
@@ -53,92 +61,86 @@ export const PaywallModal: React.FC = () => {
           </button>
         </div>
 
-        {/* Pro Subscription */}
-        <div>
-          <div className="section-header" style={{ paddingLeft: 2 }}>
-            {dict.paywall.proTitle}
-          </div>
-          <p style={{ margin: '0 0 10px 2px', fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-            {dict.paywall.proFeatures}
-          </p>
-          <div className="grid-2">
-            {SUBSCRIPTION_PRODUCTS.map((sub) => (
+        {/* Clean 4-Point Pro Benefits (100% Real On-Device) */}
+        <div className="ios-group" style={{ background: 'var(--sheet-card)' }}>
+          {features.map((feat) => (
+            <div key={feat} className="ios-row" style={{ minHeight: 44, padding: '10px 14px' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 10, fontSize: '0.86rem', lineHeight: 1.35 }}>
+                <Check size={16} color="var(--accent)" strokeWidth={2.4} style={{ flexShrink: 0, marginTop: 2 }} />
+                <span>{feat}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Fair 3-Plan Selector with Live StoreKit 2 Prices */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {PRO_PLAN_PRODUCTS.map((plan) => {
+            const active = selectedId === plan.productId;
+            const title =
+              plan.kind === 'yearly'
+                ? dict.paywall.yearlyTitle
+                : plan.kind === 'lifetime'
+                  ? dict.paywall.lifetimeTitle
+                  : dict.paywall.monthlyTitle;
+            const sub =
+              plan.kind === 'yearly'
+                ? dict.paywall.yearlySub
+                : plan.kind === 'lifetime'
+                  ? dict.paywall.lifetimeSub
+                  : dict.paywall.monthlySub;
+            const livePrice = storePrices[plan.productId] || plan.fallbackPriceDisplay;
+
+            return (
               <button
-                key={sub.productId}
+                key={plan.productId}
                 type="button"
-                className={sub.period === 'yearly' ? 'btn btn-primary' : 'btn btn-secondary'}
-                disabled={busyId !== null}
-                onClick={() => void handleBuy(sub.productId)}
+                data-testid={`plan-${plan.kind}`}
+                onClick={() => setSelectedId(plan.productId)}
                 style={{
-                  flexDirection: 'column',
-                  gap: 3,
-                  padding: '13px 12px',
-                  background: sub.period === 'yearly' ? 'var(--accent)' : 'var(--sheet-card)',
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  padding: '13px 15px',
+                  borderRadius: 'var(--radius-md)',
+                  border: `1.5px solid ${active ? 'var(--accent)' : 'transparent'}`,
+                  background: active ? 'var(--accent-soft)' : 'var(--sheet-card)',
+                  textAlign: 'left',
                 }}
               >
-                <span style={{ fontSize: '0.78rem', fontWeight: 600, opacity: 0.9 }}>
-                  {sub.period === 'yearly' ? dict.paywall.proYearly : dict.paywall.proMonthly}
-                  {sub.discountBadge ? ` (${sub.discountBadge})` : ''}
-                </span>
-                <span style={{ fontSize: '0.94rem', fontWeight: 700 }}>{sub.priceDisplay}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{title}</div>
+                  <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                    {sub}
+                  </div>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: '0.98rem', color: active ? 'var(--accent)' : 'var(--text-primary)', flexShrink: 0 }}>
+                  {livePrice}
+                </div>
               </button>
-            ))}
-          </div>
-          {entitlements.isPro && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.78rem', color: 'var(--green-text)', marginTop: 8 }}>
-              <Check size={14} />
-              <span>{dict.settings.proStatusActive}</span>
-            </div>
-          )}
+            );
+          })}
         </div>
 
-        {/* Credit Packs */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px 8px 2px' }}>
-            <span className="section-header" style={{ padding: 0, margin: 0 }}>
-              {dict.paywall.creditPacksTitle}
-            </span>
-            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-              {dict.paywall.neverExpiresBadge}
-            </span>
-          </div>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy}
+          data-testid="paywall-continue-btn"
+          onClick={() => void handleContinue()}
+          style={{ width: '100%' }}
+        >
+          {busy ? '...' : dict.paywall.continueCta}
+        </button>
 
-          <div className="ios-group" style={{ background: 'var(--sheet-card)' }}>
-            {CREDIT_PACKS.map((pack) => {
-              const label =
-                pack.credits === 100
-                  ? dict.paywall.pack100
-                  : pack.credits === 500
-                    ? dict.paywall.pack500
-                    : dict.paywall.pack2000;
-              return (
-                <button
-                  key={pack.productId}
-                  type="button"
-                  disabled={busyId !== null}
-                  className="ios-row ios-row-interactive"
-                  onClick={() => void handleBuy(pack.productId)}
-                >
-                  <span style={{ fontWeight: 500, fontSize: '0.92rem' }}>{label}</span>
-                  <span style={{ color: 'var(--accent)', fontWeight: 600, fontSize: '0.92rem' }}>
-                    {busyId === pack.productId ? '...' : pack.priceDisplay}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <p style={{ margin: '8px 2px 0 2px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            {dict.paywall.refundRule}
-          </p>
-        </div>
-
-        {/* Restore Purchases (Guideline 3.1.1) */}
         <button
           type="button"
           className="btn btn-ghost"
           data-testid="paywall-restore-btn"
           onClick={() => void restorePurchases()}
-          style={{ width: '100%', minHeight: 40 }}
+          style={{ width: '100%', minHeight: 38 }}
         >
           {dict.paywall.restorePurchases}
         </button>

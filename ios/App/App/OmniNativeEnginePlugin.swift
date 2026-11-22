@@ -17,6 +17,7 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "convertImage", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "recognizeTextOcr", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "convertMedia", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "videoToGif", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pdfToImages", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "cleanupTempWorkspace", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getSharedInboxFiles", returnType: CAPPluginReturnPromise)
@@ -257,27 +258,44 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     /// Tier 1 Hardware Media Transcode via AVFoundation / VideoToolbox (Zero GPL)
+    /// Supports MP4 (480p/720p/1080p), MOV, M4A audio extraction, M4R (30s iPhone ringtone), and PCM WAV.
     @objc public func convertMedia(_ call: CAPPluginCall) {
         guard let inputPath = call.getString("inputPath") else {
             call.reject("Missing inputPath")
             return
         }
         let targetFormat = (call.getString("targetFormat") ?? "mp4").lowercased()
+        let resolution = (call.getString("resolution") ?? "720p").lowercased()
+        let maxDurationSec = call.getDouble("maxDurationSec")
+
         let inputURL = URL(fileURLWithPath: inputPath)
         let asset = AVURLAsset(url: inputURL)
 
+        if targetFormat == "wav" {
+            exportAudioToWav(asset: asset, call: call)
+            return
+        }
+
         let preset: String
         let fileType: AVFileType
+        let mime: String
         switch targetFormat {
         case "m4a":
             preset = AVAssetExportPresetAppleM4A
             fileType = .m4a
+            mime = "audio/mp4"
+        case "m4r":
+            preset = AVAssetExportPresetAppleM4A
+            fileType = .m4a
+            mime = "audio/x-m4r"
         case "mov":
-            preset = AVAssetExportPresetHighestQuality
+            preset = resolution == "1080p" ? AVAssetExportPreset1920x1080 : (resolution == "480p" ? AVAssetExportPreset640x480 : AVAssetExportPreset1280x720)
             fileType = .mov
+            mime = "video/quicktime"
         default:
-            preset = AVAssetExportPreset1280x720
+            preset = resolution == "1080p" ? AVAssetExportPreset1920x1080 : (resolution == "480p" ? AVAssetExportPreset640x480 : AVAssetExportPreset1280x720)
             fileType = .mp4
+            mime = "video/mp4"
         }
 
         guard let exporter = AVAssetExportSession(asset: asset, presetName: preset) else {
@@ -288,20 +306,35 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
         let workDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("job_\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
-        let outputURL = workDir.appendingPathComponent("output.\(targetFormat)")
+        let exportExt = targetFormat == "m4r" ? "m4a" : targetFormat
+        let outputURL = workDir.appendingPathComponent("output.\(exportExt)")
 
         exporter.outputURL = outputURL
         exporter.outputFileType = fileType
         exporter.shouldOptimizeForNetworkUse = true
 
+        if let maxDur = maxDurationSec, maxDur > 0 {
+            let cap = CMTime(seconds: maxDur, preferredTimescale: 600)
+            let actualDur = asset.duration
+            let finalDur = CMTimeCompare(actualDur, cap) > 0 ? cap : actualDur
+            exporter.timeRange = CMTimeRange(start: .zero, duration: finalDur)
+        }
+
         exporter.exportAsynchronously {
             switch exporter.status {
             case .completed:
-                let size = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int) ?? 0
-                call.resolve([
-                    "outputPath": outputURL.path,
-                    "sizeBytes": size
-                ])
+                if let data = try? Data(contentsOf: outputURL) {
+                    defer { try? FileManager.default.removeItem(at: workDir) }
+                    call.resolve([
+                        "outputPath": outputURL.path,
+                        "base64Data": data.base64EncodedString(),
+                        "mime": mime,
+                        "sizeBytes": data.count
+                    ])
+                } else {
+                    try? FileManager.default.removeItem(at: workDir)
+                    call.reject("Failed to read exported media bytes")
+                }
             default:
                 try? FileManager.default.removeItem(at: workDir)
                 call.reject(exporter.error?.localizedDescription ?? "AVFoundation export failed")
@@ -309,7 +342,150 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Zero-residual cleanup of orphan temporary job directories older than 1 hour (or all on explicit clear).
+    /// Exports audio track from any video/audio asset to lossless 16-bit PCM WAV using AVAssetReader.
+    private func exportAudioToWav(asset: AVURLAsset, call: CAPPluginCall) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let audioTrack = asset.tracks(withMediaType: .audio).first else {
+                call.reject("No audio track found in media file")
+                return
+            }
+            do {
+                let reader = try AVAssetReader(asset: asset)
+                let outputSettings: [String: Any] = [
+                    AVFormatIDKey: kAudioFormatLinearPCM,
+                    AVSampleRateKey: 44100,
+                    AVNumberOfChannelsKey: 2,
+                    AVLinearPCMBitDepthKey: 16,
+                    AVLinearPCMIsBigEndianKey: false,
+                    AVLinearPCMIsFloatKey: false,
+                    AVLinearPCMIsNonInterleaved: false
+                ]
+                let trackOutput = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: outputSettings)
+                reader.add(trackOutput)
+                reader.startReading()
+
+                var pcmData = Data()
+                while reader.status == .reading, let sample = trackOutput.copyNextSampleBuffer() {
+                    if let block = CMSampleBufferGetDataBuffer(sample) {
+                        let len = CMBlockBufferGetDataLength(block)
+                        var buf = Data(count: len)
+                        buf.withUnsafeMutableBytes { ptr in
+                            if let base = ptr.baseAddress {
+                                CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: len, destination: base)
+                            }
+                        }
+                        pcmData.append(buf)
+                    }
+                }
+
+                let wavData = self.wrapPcmAsWav(pcmData: pcmData, sampleRate: 44100, channels: 2, bitsPerSample: 16)
+                call.resolve([
+                    "outputPath": "",
+                    "base64Data": wavData.base64EncodedString(),
+                    "mime": "audio/wav",
+                    "sizeBytes": wavData.count
+                ])
+            } catch {
+                call.reject("WAV extraction failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func wrapPcmAsWav(pcmData: Data, sampleRate: UInt32, channels: UInt16, bitsPerSample: UInt16) -> Data {
+        var header = Data()
+        let byteRate = sampleRate * UInt32(channels) * UInt32(bitsPerSample / 8)
+        let blockAlign = channels * (bitsPerSample / 8)
+        let dataSize = UInt32(pcmData.count)
+        let chunkSize = 36 + dataSize
+
+        header.append(contentsOf: "RIFF".utf8)
+        header.append(withUnsafeBytes(of: chunkSize.littleEndian) { Data($0) })
+        header.append(contentsOf: "WAVE".utf8)
+        header.append(contentsOf: "fmt ".utf8)
+        header.append(withUnsafeBytes(of: UInt32(16).littleEndian) { Data($0) })
+        header.append(withUnsafeBytes(of: UInt16(1).littleEndian) { Data($0) })
+        header.append(withUnsafeBytes(of: channels.littleEndian) { Data($0) })
+        header.append(withUnsafeBytes(of: sampleRate.littleEndian) { Data($0) })
+        header.append(withUnsafeBytes(of: byteRate.littleEndian) { Data($0) })
+        header.append(withUnsafeBytes(of: blockAlign.littleEndian) { Data($0) })
+        header.append(withUnsafeBytes(of: bitsPerSample.littleEndian) { Data($0) })
+        header.append(contentsOf: "data".utf8)
+        header.append(withUnsafeBytes(of: dataSize.littleEndian) { Data($0) })
+        header.append(pcmData)
+        return header
+    }
+
+    /// Tier 1 On-Device Video -> Animated GIF via AVAssetImageGenerator + Apple ImageIO
+    @objc public func videoToGif(_ call: CAPPluginCall) {
+        guard let inputPath = call.getString("inputPath") else {
+            call.reject("Missing inputPath")
+            return
+        }
+        let fps = max(4, min(15, call.getInt("fps") ?? 10))
+        let maxDur = max(1.0, min(15.0, call.getDouble("maxDurationSec") ?? 10.0))
+        let maxDim = CGFloat(max(160, min(640, call.getInt("maxDimension") ?? 480)))
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let asset = AVURLAsset(url: URL(fileURLWithPath: inputPath))
+            let totalSec = min(CMTimeGetSeconds(asset.duration), maxDur)
+            guard totalSec > 0 else {
+                call.reject("Video duration is invalid")
+                return
+            }
+
+            let frameCount = max(2, min(90, Int(totalSec * Double(fps))))
+            let delay = totalSec / Double(frameCount)
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: maxDim, height: maxDim)
+            generator.requestedTimeToleranceBefore = .zero
+            generator.requestedTimeToleranceAfter = .zero
+
+            let outData = NSMutableData()
+            guard let dest = CGImageDestinationCreateWithData(
+                outData,
+                UTType.gif.identifier as CFString,
+                frameCount,
+                nil
+            ) else {
+                call.reject("Could not initialize GIF encoder")
+                return
+            }
+
+            let gifProps: [CFString: Any] = [
+                kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]
+            ]
+            CGImageDestinationSetProperties(dest, gifProps as CFDictionary)
+
+            let frameProps: [CFString: Any] = [
+                kCGImagePropertyGIFDictionary: [
+                    kCGImagePropertyGIFDelayTime: delay,
+                    kCGImagePropertyGIFUnclampedDelayTime: delay
+                ]
+            ]
+
+            for idx in 0..<frameCount {
+                let t = CMTime(seconds: Double(idx) * delay, preferredTimescale: 600)
+                if let cg = try? generator.copyCGImage(at: t, actualTime: nil) {
+                    CGImageDestinationAddImage(dest, cg, frameProps as CFDictionary)
+                }
+            }
+
+            guard CGImageDestinationFinalize(dest) else {
+                call.reject("Failed to finalize animated GIF")
+                return
+            }
+
+            let bytes = outData as Data
+            call.resolve([
+                "base64Data": bytes.base64EncodedString(),
+                "mime": "image/gif",
+                "sizeBytes": bytes.count
+            ])
+        }
+    }
+
+    /// Zero-residual cleanup of orphan temporary job directories.
     @objc public func cleanupTempWorkspace(_ call: CAPPluginCall) {
         DispatchQueue.global(qos: .utility).async {
             let fm = FileManager.default
@@ -335,7 +511,7 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Reads files handed off via iOS Open-In / Share Extension inbox and immediately removes them after handoff.
+    /// Reads files handed off via iOS Open-In inbox and immediately removes them after handoff.
     @objc public func getSharedInboxFiles(_ call: CAPPluginCall) {
         DispatchQueue.global(qos: .userInitiated).async {
             let fm = FileManager.default

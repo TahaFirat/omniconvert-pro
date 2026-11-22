@@ -58,7 +58,27 @@ export class ConversionGraph {
     target: string,
     offlineOnly: boolean,
   ): { steps: ConversionStep[]; totalWeight: number } | null {
-    if (source === target) return null;
+    // Support explicit same-format toolkit operations (e.g. pdf -> pdf split/rotate/compress, mp4 -> mp4 compress)
+    if (source === target) {
+      const directSelf = (this.adjacency.get(source) ?? []).find(
+        (e) => e.target === target && (!offlineOnly || e.tier !== 3),
+      );
+      if (!directSelf) return null;
+      return {
+        steps: [
+          {
+            source: directSelf.source,
+            target: directSelf.target,
+            engineId: directSelf.engineId,
+            tier: directSelf.tier,
+            latencyMsEst: directSelf.latencyMsEst,
+            qualityLoss: directSelf.qualityLoss,
+            warningCode: directSelf.warningCode,
+          },
+        ],
+        totalWeight: computeEdgeWeight(directSelf, false),
+      };
+    }
 
     const queue: SearchState[] = [{ node: source, cost: 0, steps: [] }];
     // Track best cost per (node, hopCount) to prevent cycles and allow cheaper shorter routes
@@ -204,6 +224,7 @@ export class ConversionGraph {
   public getReachableTargets(
     sourceRaw: string,
     offlineOnly: boolean,
+    includeCloud = false,
   ): Array<{ format: FormatDescriptor; plan: ConversionPlan; isPopular: boolean }> {
     const source = normalizeFormatId(sourceRaw);
     const sourceDesc = FORMAT_BY_ID.get(source);
@@ -211,9 +232,10 @@ export class ConversionGraph {
     const results: Array<{ format: FormatDescriptor; plan: ConversionPlan; isPopular: boolean }> = [];
 
     for (const candidate of FORMAT_REGISTRY) {
-      if (candidate.id === source) continue;
       const plan = this.planConversion(source, candidate.id, { offlineOnly });
       if (!plan) continue;
+      // Hide unhosted Tier-3-only cloud formats unless a live cloud backend is enabled
+      if (!includeCloud && plan.requiresCloud) continue;
       results.push({
         format: candidate,
         plan,

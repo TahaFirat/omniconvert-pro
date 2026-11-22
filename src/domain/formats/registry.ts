@@ -43,12 +43,12 @@ export const FORMAT_REGISTRY: readonly FormatDescriptor[] = [
   { id: 'rw2', extension: 'rw2', label: 'Panasonic RW2', mime: 'image/x-panasonic-rw2', category: 'image', description: 'Panasonic RAW', defaultTier: 3, popularTargets: ['jpg', 'png', 'tiff'] },
 
   // ===================== PDF & OCR =====================
-  { id: 'pdf', extension: 'pdf', label: 'PDF', mime: 'application/pdf', category: 'pdf', description: 'Portable Document Format', defaultTier: 1, popularTargets: ['png', 'jpg', 'txt', 'docx', 'xlsx', 'epub', 'html'] },
+  { id: 'pdf', extension: 'pdf', label: 'PDF', mime: 'application/pdf', category: 'pdf', description: 'Portable Document Format', defaultTier: 1, popularTargets: ['pdf', 'png', 'jpg', 'txt', 'zip'] },
 
   // ===================== VIDEO =====================
-  { id: 'mp4', extension: 'mp4', label: 'MP4 (H.264/HEVC)', mime: 'video/mp4', category: 'video', description: 'MPEG-4 Hardware Video', defaultTier: 1, isLossy: true, popularTargets: ['mov', 'm4a', 'wav', 'gif', 'webm', 'mkv'] },
-  { id: 'mov', extension: 'mov', label: 'QuickTime MOV', mime: 'video/quicktime', category: 'video', description: 'Apple QuickTime Movie', defaultTier: 1, isLossy: true, popularTargets: ['mp4', 'm4a', 'wav', 'gif', 'webm'] },
-  { id: 'm4v', extension: 'm4v', label: 'M4V', mime: 'video/x-m4v', category: 'video', description: 'Apple M4V Video', defaultTier: 1, isLossy: true, popularTargets: ['mp4', 'mov', 'm4a'] },
+  { id: 'mp4', extension: 'mp4', label: 'MP4 (H.264/HEVC)', mime: 'video/mp4', category: 'video', description: 'MPEG-4 Hardware Video', defaultTier: 1, isLossy: true, popularTargets: ['mp4', 'mov', 'm4a', 'm4r', 'wav', 'gif'] },
+  { id: 'mov', extension: 'mov', label: 'QuickTime MOV', mime: 'video/quicktime', category: 'video', description: 'Apple QuickTime Movie', defaultTier: 1, isLossy: true, popularTargets: ['mp4', 'm4a', 'm4r', 'wav', 'gif'] },
+  { id: 'm4v', extension: 'm4v', label: 'M4V', mime: 'video/x-m4v', category: 'video', description: 'Apple M4V Video', defaultTier: 1, isLossy: true, popularTargets: ['mp4', 'mov', 'm4a', 'm4r', 'gif'] },
   { id: 'mkv', extension: 'mkv', label: 'Matroska MKV', mime: 'video/x-matroska', category: 'video', description: 'Matroska Multimedia Container', defaultTier: 3, popularTargets: ['mp4', 'mov', 'webm', 'mp3', 'wav'] },
   { id: 'webm', extension: 'webm', label: 'WebM', mime: 'video/webm', category: 'video', description: 'Web Video (VP8/VP9/AV1)', defaultTier: 3, isLossy: true, popularTargets: ['mp4', 'mov', 'gif', 'mp3'] },
   { id: 'avi', extension: 'avi', label: 'AVI', mime: 'video/x-msvideo', category: 'video', description: 'Audio Video Interleave', defaultTier: 3, popularTargets: ['mp4', 'mov', 'mkv', 'mp3'] },
@@ -61,9 +61,10 @@ export const FORMAT_REGISTRY: readonly FormatDescriptor[] = [
   { id: '3gp', extension: '3gp', label: '3GP', mime: 'video/3gpp', category: 'video', description: '3GPP Mobile Video', defaultTier: 3, isLossy: true, popularTargets: ['mp4', 'm4a'] },
 
   // ===================== AUDIO =====================
-  { id: 'wav', extension: 'wav', label: 'WAV (Lossless PCM)', mime: 'audio/wav', category: 'audio', description: 'Uncompressed Waveform Audio', defaultTier: 1, popularTargets: ['m4a', 'mp3', 'flac', 'ogg', 'aac'] },
-  { id: 'm4a', extension: 'm4a', label: 'M4A (AAC)', mime: 'audio/mp4', category: 'audio', description: 'MPEG-4 Audio', defaultTier: 1, isLossy: true, popularTargets: ['wav', 'mp3', 'flac', 'ogg'] },
-  { id: 'aac', extension: 'aac', label: 'AAC', mime: 'audio/aac', category: 'audio', description: 'Advanced Audio Coding', defaultTier: 1, isLossy: true, popularTargets: ['wav', 'm4a', 'mp3'] },
+  { id: 'wav', extension: 'wav', label: 'WAV (Lossless PCM)', mime: 'audio/wav', category: 'audio', description: 'Uncompressed Waveform Audio', defaultTier: 1, popularTargets: ['m4a', 'm4r', 'zip'] },
+  { id: 'm4a', extension: 'm4a', label: 'M4A (AAC)', mime: 'audio/mp4', category: 'audio', description: 'MPEG-4 Audio', defaultTier: 1, isLossy: true, popularTargets: ['wav', 'm4r', 'zip'] },
+  { id: 'm4r', extension: 'm4r', label: 'M4R (iPhone Zil Sesi)', mime: 'audio/x-m4r', category: 'audio', description: 'iPhone Ringtone (30s AAC)', defaultTier: 1, isLossy: true, popularTargets: ['m4a', 'wav'] },
+  { id: 'aac', extension: 'aac', label: 'AAC', mime: 'audio/aac', category: 'audio', description: 'Advanced Audio Coding', defaultTier: 1, isLossy: true, popularTargets: ['wav', 'm4a', 'm4r'] },
   { id: 'caf', extension: 'caf', label: 'Apple CAF', mime: 'audio/x-caf', category: 'audio', description: 'Core Audio Format', defaultTier: 1, popularTargets: ['wav', 'm4a', 'mp3'] },
   { id: 'aiff', extension: 'aiff', label: 'AIFF', mime: 'audio/aiff', category: 'audio', description: 'Audio Interchange File Format', defaultTier: 1, popularTargets: ['wav', 'm4a', 'flac', 'mp3'] },
   { id: 'mp3', extension: 'mp3', label: 'MP3', mime: 'audio/mpeg', category: 'audio', description: 'MPEG Layer-3 Audio', defaultTier: 2, isLossy: true, popularTargets: ['wav', 'm4a', 'ogg', 'flac'] },
@@ -184,7 +185,6 @@ const EXTENSION_ALIASES: Record<string, string> = {
   pbm: 'pnm',
   'tar.gz': 'tgz',
   aif: 'aiff',
-  m4r: 'm4a',
   sqlite3: 'sqlite',
   db: 'sqlite',
 };
@@ -219,8 +219,9 @@ function buildConversionEdges(): ConversionEdge[] {
     latencyMsEst: number,
     qualityLoss = 0,
     warningCode?: WarningCode,
+    allowSame = false,
   ) => {
-    if (source === target) return;
+    if (source === target && !allowSame) return;
     edges.push({ source, target, engineId, tier, latencyMsEst, qualityLoss, warningCode });
   };
 
@@ -280,6 +281,8 @@ function buildConversionEdges(): ConversionEdge[] {
   // Note: HEIC -> PNG (Tier 1) -> PDF (Tier 2) is automatically resolved via 2-hop Dijkstra!
   // Plus SVG -> PNG -> PDF automatically resolved via 2-hop Dijkstra!
 
+  // PDF -> PDF (On-device PDF Toolkit: Merge / Split Pages / Rotate / Compress & Strip Metadata!)
+  add('pdf', 'pdf', 'local_pdf', 2, 180, 0, undefined, true);
   // PDF -> Images & Offline OCR (Tier 1 PDFKit + Vision OCR)
   add('pdf', 'png', 'ios_pdfkit', 1, 350, 5);
   add('pdf', 'jpg', 'ios_pdfkit', 1, 350, 10);
@@ -296,20 +299,21 @@ function buildConversionEdges(): ConversionEdge[] {
   addMesh(['png', 'jpg', 'webp', 'tiff'], ['avif', 'jxl', 'psd'], 'cloud_imagemagick', 3, 2400, imgLoss);
 
   // --- TIER 1 & TIER 3 VIDEO ---
+  add('mp4', 'mp4', 'ios_avfoundation', 1, 900, 6, undefined, true); // Hardware video compression
   addMesh(['mp4', 'mov', 'm4v'], ['mp4', 'mov', 'm4v'], 'ios_avfoundation', 1, 900, () => 8, () => 'WARN_LOSSY_REENCODE');
-  addMesh(['mp4', 'mov', 'm4v'], ['m4a', 'wav', 'aac'], 'ios_avfoundation', 1, 500, () => 0);
+  addMesh(['mp4', 'mov', 'm4v'], ['m4a', 'm4r', 'wav', 'gif'], 'ios_avfoundation', 1, 500, () => 0);
   const cloudVideos = ['mkv', 'webm', 'avi', 'flv', 'wmv', 'mxf', 'vob', 'ts', 'rmvb', '3gp', 'gif'];
   addMesh(cloudVideos, ['mp4', 'mov', 'webm', 'mkv', 'gif'], 'cloud_ffmpeg', 3, 5500, () => 12, () => 'WARN_LOSSY_REENCODE');
-  addMesh(['mp4', 'mov', 'm4v'], ['mkv', 'webm', 'avi', 'gif'], 'cloud_ffmpeg', 3, 4500, () => 12, () => 'WARN_LOSSY_REENCODE');
+  addMesh(['mp4', 'mov', 'm4v'], ['mkv', 'webm', 'avi'], 'cloud_ffmpeg', 3, 4500, () => 12, () => 'WARN_LOSSY_REENCODE');
   addMesh(cloudVideos, ['mp3', 'wav', 'm4a', 'flac'], 'cloud_ffmpeg', 3, 3500, () => 4);
 
   // --- TIER 1, TIER 2 & TIER 3 AUDIO ---
-  const lossyAudio = new Set(['mp3', 'm4a', 'aac', 'ogg', 'opus', 'wma', 'amr']);
+  const lossyAudio = new Set(['mp3', 'm4a', 'm4r', 'aac', 'ogg', 'opus', 'wma', 'amr']);
   const audioWarn = (s: string, t: string): WarningCode | undefined =>
     lossyAudio.has(s) && lossyAudio.has(t) ? 'WARN_LOSSY_REENCODE' : undefined;
   const audioLoss = (s: string, t: string) => (lossyAudio.has(s) && lossyAudio.has(t) ? 15 : lossyAudio.has(t) ? 8 : 0);
 
-  addMesh(['wav', 'm4a', 'aac', 'caf', 'aiff'], ['wav', 'm4a', 'aac'], 'ios_avfoundation', 1, 350, audioLoss, audioWarn);
+  addMesh(['wav', 'm4a', 'm4r', 'aac', 'caf', 'aiff'], ['wav', 'm4a', 'm4r'], 'ios_avfoundation', 1, 350, audioLoss, audioWarn);
   addMesh(['mp3', 'flac', 'ogg', 'opus', 'alac', 'wav'], ['wav'], 'local_audio', 2, 300, () => 0);
   const allAudioCloud = ['wav', 'm4a', 'aac', 'caf', 'aiff', 'mp3', 'flac', 'ogg', 'opus', 'alac', 'wma', 'amr', 'ac3', 'dts', 'm4b'];
   addMesh(allAudioCloud, ['mp3', 'flac', 'ogg', 'opus', 'm4a', 'wav', 'aac'], 'cloud_ffmpeg', 3, 2500, audioLoss, audioWarn);
@@ -324,12 +328,21 @@ function buildConversionEdges(): ConversionEdge[] {
   add('txt', 'md', 'local_data', 2, 40, 0);
   add('txt', 'pdf', 'local_pdf', 2, 160, 0);
   add('md', 'pdf', 'local_pdf', 2, 190, 0);
+  add('html', 'pdf', 'local_pdf', 2, 200, 4);
   add('rtf', 'txt', 'local_data', 2, 70, 5);
+  add('rtf', 'pdf', 'local_pdf', 2, 190, 5);
 
-  // Spreadsheets local extraction (Tier 2: XLSX/ODS -> CSV/JSON/TSV!)
-  addMesh(['xlsx', 'ods'], ['csv', 'json', 'tsv'], 'local_data', 2, 180, () => 4);
+  // 100% On-Device DOCX & EPUB Extraction/PDF (Tier 2 — Zero Cloud Needed!)
+  add('docx', 'txt', 'local_data', 2, 120, 4);
+  add('docx', 'html', 'local_data', 2, 140, 5, 'WARN_LAYOUT_SHIFT');
+  add('docx', 'md', 'local_data', 2, 140, 5);
+  add('docx', 'pdf', 'local_pdf', 2, 240, 6, 'WARN_LAYOUT_SHIFT');
 
-  // Tier 3 Office (LibreOffice + Pandoc)
+  // Spreadsheets local extraction (Tier 2: XLSX/ODS -> CSV/JSON/TSV/HTML/PDF!)
+  addMesh(['xlsx', 'ods'], ['csv', 'json', 'tsv', 'html'], 'local_data', 2, 180, () => 4);
+  addMesh(['xlsx', 'ods', 'csv'], ['pdf'], 'local_pdf', 2, 220, () => 5);
+
+  // Tier 3 Office (LibreOffice + Pandoc — used only when Cloud Worker is enabled)
   const officeDocs = ['docx', 'doc', 'odt', 'rtf', 'pages', 'wps', 'tex', 'html', 'md', 'txt'];
   addMesh(officeDocs, ['pdf', 'docx', 'odt', 'rtf', 'html', 'txt', 'md'], 'cloud_libreoffice', 3, 3200, () => 5, (s) =>
     s === 'pages' ? 'WARN_LAYOUT_SHIFT' : undefined,
@@ -341,10 +354,11 @@ function buildConversionEdges(): ConversionEdge[] {
   addMesh(['pptx', 'ppt', 'odp', 'key'], ['pdf', 'pptx', 'odp'], 'cloud_libreoffice', 3, 3600, () => 5, (s) =>
     s === 'key' ? 'WARN_LAYOUT_SHIFT' : undefined,
   );
-  // Note: DOCX -> PDF (Tier 3) -> PNG (Tier 1) OR PPTX -> PDF -> PNG resolves automatically via multi-hop Dijkstra!
 
   // --- TIER 2 & TIER 3 E-BOOKS ---
   add('epub', 'txt', 'local_archive', 2, 180, 5);
+  add('epub', 'html', 'local_archive', 2, 190, 5);
+  add('epub', 'pdf', 'local_pdf', 2, 260, 6);
   add('cbz', 'zip', 'local_archive', 2, 120, 0);
   const ebooks = ['epub', 'mobi', 'azw3', 'azw', 'fb2', 'lit', 'lrf', 'djvu', 'cbz', 'cbr', 'pdf', 'docx', 'md'];
   addMesh(ebooks, ['epub', 'mobi', 'azw3', 'pdf', 'txt', 'fb2'], 'cloud_calibre', 3, 3500, () => 6);

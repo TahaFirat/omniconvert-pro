@@ -33,20 +33,37 @@ export interface NativeOcrResult {
 export interface NativeMediaParams {
   inputPath: string;
   targetFormat: string;
-  maxDimension?: number;
+  resolution?: '1080p' | '720p' | '480p';
+  maxDurationSec?: number;
+}
+
+export interface NativeMediaResult {
+  outputPath: string;
+  base64Data?: string;
+  mime: string;
+  sizeBytes: number;
 }
 
 export interface OmniNativeEnginePlugin {
   isAvailable(): Promise<{ available: boolean; platform: string; osVersion: string }>;
   convertImage(options: NativeImageConvertParams): Promise<NativeBinaryResult>;
   recognizeTextOcr(options: NativeOcrParams): Promise<NativeOcrResult>;
-  convertMedia(options: NativeMediaParams): Promise<{ outputPath: string; sizeBytes: number }>;
+  convertMedia(options: NativeMediaParams): Promise<NativeMediaResult>;
+  videoToGif(options: { inputPath: string; fps?: number; maxDurationSec?: number; maxDimension?: number }): Promise<NativeBinaryResult>;
   pdfToImages(options: { base64Data: string; targetFormat: string; dpi: number }): Promise<NativeBinaryResult>;
   cleanupTempWorkspace(): Promise<{ cleanedBytes: number; removedDirs: number }>;
   getSharedInboxFiles(): Promise<{ files: Array<{ name: string; base64Data: string; mime: string }> }>;
 }
 
+export interface StoreKitProductInfo {
+  id: string;
+  displayName: string;
+  displayPrice: string;
+  description: string;
+}
+
 export interface OmniBillingPlugin {
+  getProducts(options: { productIds: string[] }): Promise<{ products: StoreKitProductInfo[] }>;
   purchaseProduct(options: { productId: string }): Promise<{
     success: boolean;
     transactionId?: string;

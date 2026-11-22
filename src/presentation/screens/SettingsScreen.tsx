@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronRight, X } from 'lucide-react';
 import { useApp } from '../../application/AppContext';
-import { getRemainingDailyFreeTrials } from '../../application/billingService';
+import { getRemainingDailyProTrials } from '../../application/billingService';
 import { APP_CONFIG, OPEN_SOURCE_NOTICES } from '../../core/constants';
 import { SUPPORTED_LOCALES } from '../../core/i18n';
 import type { ThemeMode } from '../../infrastructure/storage/localDb';
@@ -27,7 +27,12 @@ export const SettingsScreen: React.FC = () => {
   const [licensesOpen, setLicensesOpen] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
 
-  const remainingTrials = getRemainingDailyFreeTrials(entitlements);
+  const remainingTrials = getRemainingDailyProTrials(entitlements);
+  const planLabel = entitlements.isLifetime
+    ? dict.settings.proStatusLifetime
+    : entitlements.isPro
+      ? dict.settings.proStatusActive
+      : dict.settings.proStatusFree;
 
   const themes: Array<{ id: ThemeMode; label: string }> = [
     { id: 'system', label: dict.settings.themeSystem },
@@ -72,35 +77,45 @@ export const SettingsScreen: React.FC = () => {
         </div>
       </section>
 
-      {/* Plan & Credits */}
+      {/* Plan & StoreKit 2 */}
       <section>
         <h2 className="section-header">{dict.settings.billingSection}</h2>
         <div className="ios-group">
           <div className="ios-row">
-            <span style={{ fontWeight: 500, fontSize: '0.94rem' }}>{dict.settings.cloudCredits}</span>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.92rem', fontWeight: 500 }}>
-              {entitlements.isPro ? dict.settings.proStatusActive : entitlements.cloudCreditsBalance}
+            <span style={{ fontWeight: 500, fontSize: '0.94rem' }}>{dict.settings.planStatus}</span>
+            <span
+              style={{
+                color: entitlements.isPro ? 'var(--green-text)' : 'var(--text-muted)',
+                fontSize: '0.92rem',
+                fontWeight: 600,
+              }}
+            >
+              {planLabel}
             </span>
           </div>
 
-          <div className="ios-row">
-            <span style={{ fontWeight: 500, fontSize: '0.94rem' }}>{dict.settings.dailyTrials}</span>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.92rem', fontWeight: 500 }}>
-              {remainingTrials} / 3
-            </span>
-          </div>
+          {!entitlements.isPro && (
+            <div className="ios-row">
+              <span style={{ fontWeight: 500, fontSize: '0.94rem' }}>{dict.settings.dailyTrials}</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.92rem', fontWeight: 500 }}>
+                {remainingTrials} / 3
+              </span>
+            </div>
+          )}
 
-          <button
-            type="button"
-            className="ios-row ios-row-interactive"
-            data-testid="open-paywall-btn"
-            onClick={() => setPaywallOpen(true)}
-          >
-            <span style={{ fontWeight: 500, fontSize: '0.94rem', color: 'var(--accent)' }}>
-              {dict.settings.managePlan}
-            </span>
-            <ChevronRight size={17} color="var(--text-muted)" />
-          </button>
+          {!entitlements.isLifetime && (
+            <button
+              type="button"
+              className="ios-row ios-row-interactive"
+              data-testid="open-paywall-btn"
+              onClick={() => setPaywallOpen(true)}
+            >
+              <span style={{ fontWeight: 500, fontSize: '0.94rem', color: 'var(--accent)' }}>
+                {dict.settings.managePlan}
+              </span>
+              <ChevronRight size={17} color="var(--text-muted)" />
+            </button>
+          )}
 
           <button
             type="button"
@@ -157,7 +172,11 @@ export const SettingsScreen: React.FC = () => {
               }}
             >
               {SUPPORTED_LOCALES.map((loc) => (
-                <option key={loc.code} value={loc.code} style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
+                <option
+                  key={loc.code}
+                  value={loc.code}
+                  style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
+                >
                   {loc.label}
                 </option>
               ))}
@@ -266,7 +285,6 @@ export const SettingsScreen: React.FC = () => {
         </div>
       </section>
 
-      {/* Open Source Licenses Modal */}
       {licensesOpen && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={dict.settings.openSourceLicenses}>
           <div className="modal-sheet">

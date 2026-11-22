@@ -8,10 +8,54 @@ public class OmniBillingPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "OmniBillingPlugin"
     public let jsName = "OmniBilling"
     public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "getProducts", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "purchaseProduct", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "restorePurchases", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestAppStoreReview", returnType: CAPPluginReturnPromise)
     ]
+
+    private var updatesTask: Task<Void, Never>?
+
+    override public func load() {
+        // StoreKit 2 recommended transaction observer for interrupted / Ask-to-Buy / renewal transactions
+        updatesTask = Task.detached {
+            for await verification in Transaction.updates {
+                if case .verified(let transaction) = verification {
+                    await transaction.finish()
+                }
+            }
+        }
+    }
+
+    deinit {
+        updatesTask?.cancel()
+    }
+
+    /// Fetches live localized product metadata & displayPrice (TRY / USD / EUR) directly from App Store.
+    @objc public func getProducts(_ call: CAPPluginCall) {
+        let productIds = call.getArray("productIds", String.self) ?? []
+        guard !productIds.isEmpty else {
+            call.resolve(["products": []])
+            return
+        }
+
+        Task {
+            do {
+                let products = try await Product.products(for: productIds)
+                let list: [[String: Any]] = products.map { p in
+                    [
+                        "id": p.id,
+                        "displayName": p.displayName,
+                        "displayPrice": p.displayPrice,
+                        "description": p.description
+                    ]
+                }
+                call.resolve(["products": list])
+            } catch {
+                call.reject("StoreKit 2 product lookup error: \(error.localizedDescription)")
+            }
+        }
+    }
 
     /// Native StoreKit 2 In-App Purchase (Guideline 3.1.1 compliant — zero external checkout).
     @objc public func purchaseProduct(_ call: CAPPluginCall) {
@@ -24,7 +68,7 @@ public class OmniBillingPlugin: CAPPlugin, CAPBridgedPlugin {
             do {
                 let products = try await Product.products(for: [productId])
                 guard let product = products.first else {
-                    call.reject("Product \(productId) is not configured in App Store Connect yet.")
+                    call.reject("App Store ürünü yüklenemedi. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.")
                     return
                 }
                 let result = try await product.purchase()
@@ -63,7 +107,7 @@ public class OmniBillingPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Native StoreKit 2 Restore Purchases (Mandatory per Apple App Store Guideline 3.1.1).
+    /// Native StoreKit 2 Restore Purchases (Subscriptions + Non-Consumable Lifetime).
     @objc public func restorePurchases(_ call: CAPPluginCall) {
         Task {
             do {
@@ -73,9 +117,11 @@ public class OmniBillingPlugin: CAPPlugin, CAPBridgedPlugin {
 
                 for await verification in Transaction.currentEntitlements {
                     if case .verified(let transaction) = verification {
-                        restoredIds.append(transaction.productID)
-                        if transaction.productID.contains(".pro.") {
-                            isPro = true
+                        if transaction.revocationDate == nil {
+                            restoredIds.append(transaction.productID)
+                            if transaction.productID.contains(".pro.") {
+                                isPro = true
+                            }
                         }
                     }
                 }

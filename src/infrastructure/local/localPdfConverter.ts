@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { degrees, PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { OmniError } from '../../core/errors';
 import type { ConversionOptions } from '../../domain/entities/job';
 import { convertImageLocally } from './localImageConverter';
@@ -140,6 +140,70 @@ export async function textToPdfLocally(
   const pdfBytes = await pdfDoc.save({ useObjectStreams: true });
   const copy = new Uint8Array(pdfBytes.byteLength);
   copy.set(pdfBytes);
+  return { blob: new Blob([copy], { type: 'application/pdf' }), mime: 'application/pdf' };
+}
+
+/**
+ * Parses human page-range strings like "1-3, 5, 7-8" into sorted 0-based page indices.
+ */
+export function parsePageRange(rangeSpec: string | undefined, totalPages: number): number[] {
+  if (!rangeSpec || !rangeSpec.trim()) {
+    return Array.from({ length: totalPages }, (_, i) => i);
+  }
+  const indices = new Set<number>();
+  for (const part of rangeSpec.split(',')) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    if (trimmed.includes('-')) {
+      const [aRaw, bRaw] = trimmed.split('-').map((n) => parseInt(n.trim(), 10));
+      if (!Number.isNaN(aRaw) && !Number.isNaN(bRaw)) {
+        const start = Math.max(1, Math.min(aRaw, bRaw));
+        const end = Math.min(totalPages, Math.max(aRaw, bRaw));
+        for (let p = start; p <= end; p++) indices.add(p - 1);
+      }
+    } else {
+      const p = parseInt(trimmed, 10);
+      if (!Number.isNaN(p) && p >= 1 && p <= totalPages) {
+        indices.add(p - 1);
+      }
+    }
+  }
+  if (indices.size === 0) {
+    throw new OmniError('INVALID_PAGE_RANGE', `Invalid page range "${rangeSpec}" for ${totalPages}-page PDF.`);
+  }
+  return Array.from(indices).sort((a, b) => a - b);
+}
+
+/**
+ * On-device PDF Toolkit: Split/Extract page range, Rotate pages (90/180/270°), Compress & Strip Metadata.
+ */
+export async function transformPdfLocally(
+  pdfBlob: Blob,
+  options: ConversionOptions,
+): Promise<{ blob: Blob; mime: string }> {
+  const srcBytes = new Uint8Array(await pdfBlob.arrayBuffer());
+  const srcDoc = await PDFDocument.load(srcBytes);
+  const totalPages = srcDoc.getPageCount();
+  const selectedIndices = parsePageRange(options.pdfPageRange, totalPages);
+
+  const outDoc = await PDFDocument.create();
+  if (options.stripExif) {
+    stripPdfMetadata(outDoc);
+  }
+
+  const copied = await outDoc.copyPages(srcDoc, selectedIndices);
+  const rot = options.pdfRotateDegrees ?? 0;
+  for (const page of copied) {
+    if (rot !== 0) {
+      const current = page.getRotation().angle;
+      page.setRotation(degrees((current + rot) % 360));
+    }
+    outDoc.addPage(page);
+  }
+
+  const outBytes = await outDoc.save({ useObjectStreams: true });
+  const copy = new Uint8Array(outBytes.byteLength);
+  copy.set(outBytes);
   return { blob: new Blob([copy], { type: 'application/pdf' }), mime: 'application/pdf' };
 }
 

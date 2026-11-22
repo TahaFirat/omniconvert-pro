@@ -1,105 +1,131 @@
 import { MONETIZATION_CONFIG } from '../core/constants';
 import { InsufficientCreditsError } from '../core/errors';
 import {
-  CREDIT_PACKS,
   getTodayIsoDate,
+  PRO_PLAN_PRODUCTS,
   type EntitlementState,
+  type StoreProductPriceMap,
 } from '../domain/entities/billing';
+import type { ConversionOptions, ConversionPlan } from '../domain/entities/job';
 import { isNativeIos, OmniBilling } from '../infrastructure/native/omniNativeBridge';
 
-export interface CloudQuotaReservation {
-  usedType: 'pro' | 'daily_trial' | 'credit';
-  creditsCharged: number;
+export interface ProTrialReservation {
+  usedType: 'free_standard' | 'pro' | 'daily_trial';
+}
+
+const PRO_RAW_SOURCES = new Set(['dng', 'cr2', 'nef', 'arw']);
+const PRO_MEDIA_ENGINES = new Set(['ios_avfoundation', 'ios_vision_ocr', 'ios_pdfkit']);
+
+/**
+ * Determines whether a conversion uses an advanced Pro feature.
+ * Everyday single conversions (Images, DOCX/XLSX/EPUB/MD/HTML/TXT, Data JSON/YAML/CSV/XML,
+ * Archives ZIP/TAR/GZ, Images->PDF, EXIF strip) are ALWAYS 100% free & unlimited!
+ */
+export function isProFeatureJob(
+  plan: ConversionPlan,
+  options: ConversionOptions,
+  batchSize: number,
+): boolean {
+  if (batchSize > MONETIZATION_CONFIG.FREE_BATCH_LIMIT) return true;
+  if (PRO_RAW_SOURCES.has(plan.sourceFormat)) return true;
+  if (plan.steps.some((s) => PRO_MEDIA_ENGINES.has(s.engineId))) return true;
+  if (plan.sourceFormat === 'pdf' && plan.targetFormat === 'pdf') return true; // PDF Split / Rotate / Merge
+  if (options.pdfPageRange?.trim()) return true;
+  if (options.pdfRotateDegrees) return true;
+  return false;
 }
 
 export function normalizeDailyTrials(state: EntitlementState): EntitlementState {
   const today = getTodayIsoDate();
-  if (state.dailyFreeCloudTrialsDate !== today) {
+  if (state.dailyProTrialsDate !== today) {
     return {
       ...state,
-      dailyFreeCloudTrialsUsed: 0,
-      dailyFreeCloudTrialsDate: today,
+      dailyProTrialsUsed: 0,
+      dailyProTrialsDate: today,
     };
   }
   return state;
 }
 
-export function getRemainingDailyFreeTrials(state: EntitlementState): number {
+export function getRemainingDailyProTrials(state: EntitlementState): number {
+  if (state.isPro) return MONETIZATION_CONFIG.FREE_DAILY_PRO_TRIALS;
   const normalized = normalizeDailyTrials(state);
-  return Math.max(0, MONETIZATION_CONFIG.FREE_DAILY_CLOUD_TRIALS - normalized.dailyFreeCloudTrialsUsed);
+  return Math.max(0, MONETIZATION_CONFIG.FREE_DAILY_PRO_TRIALS - normalized.dailyProTrialsUsed);
 }
 
 export function getBatchLimit(state: EntitlementState): number {
-  if (state.isPro) return MONETIZATION_CONFIG.PRO_BATCH_LIMIT;
-  if (state.cloudCreditsBalance > 0) return MONETIZATION_CONFIG.CREDIT_PACK_BATCH_LIMIT;
-  return MONETIZATION_CONFIG.FREE_BATCH_LIMIT;
+  return state.isPro ? MONETIZATION_CONFIG.PRO_BATCH_LIMIT : MONETIZATION_CONFIG.FREE_BATCH_LIMIT;
+}
+
+export function getPresetLimit(state: EntitlementState): number {
+  return state.isPro ? 999 : MONETIZATION_CONFIG.FREE_CUSTOM_PRESETS_LIMIT;
 }
 
 /**
- * Atomically reserves quota before launching a Tier 3 Cloud job.
- * Tier 1 & Tier 2 local jobs NEVER call this — they are 100% free forever!
+ * Atomically checks/reserves a daily free Pro trial if the user is on Free tier and runs a Pro feature.
+ * Standard conversions NEVER consume trials — they are free & unlimited forever!
  */
-export function reserveCloudQuota(
+export function reserveProAccess(
   state: EntitlementState,
-  fileSizeBytes: number,
-): { nextState: EntitlementState; reservation: CloudQuotaReservation } {
+  usesProFeature: boolean,
+): { nextState: EntitlementState; reservation: ProTrialReservation } {
+  if (!usesProFeature) {
+    return { nextState: state, reservation: { usedType: 'free_standard' } };
+  }
   const normalized = normalizeDailyTrials(state);
-
   if (normalized.isPro) {
-    return {
-      nextState: normalized,
-      reservation: { usedType: 'pro', creditsCharged: 0 },
-    };
+    return { nextState: normalized, reservation: { usedType: 'pro' } };
   }
-
-  // Daily 3 free cloud trials (<= 25 MB)
-  if (
-    normalized.dailyFreeCloudTrialsUsed < MONETIZATION_CONFIG.FREE_DAILY_CLOUD_TRIALS &&
-    fileSizeBytes <= MONETIZATION_CONFIG.FREE_CLOUD_MAX_BYTES
-  ) {
+  if (normalized.dailyProTrialsUsed < MONETIZATION_CONFIG.FREE_DAILY_PRO_TRIALS) {
     return {
       nextState: {
         ...normalized,
-        dailyFreeCloudTrialsUsed: normalized.dailyFreeCloudTrialsUsed + 1,
+        dailyProTrialsUsed: normalized.dailyProTrialsUsed + 1,
       },
-      reservation: { usedType: 'daily_trial', creditsCharged: 0 },
+      reservation: { usedType: 'daily_trial' },
     };
   }
-
-  // Never-expiring credit pack balance
-  if (normalized.cloudCreditsBalance >= 1) {
-    return {
-      nextState: {
-        ...normalized,
-        cloudCreditsBalance: normalized.cloudCreditsBalance - 1,
-      },
-      reservation: { usedType: 'credit', creditsCharged: 1 },
-    };
-  }
-
   throw new InsufficientCreditsError();
 }
 
 /**
- * Credit Fairness Rule: automatically and immediately refunds spent cloud credit/trial on failure.
+ * Fairness Rule: automatically refunds the daily free Pro trial if a job fails or is cancelled.
  */
-export function refundCloudQuota(
+export function refundProAccess(
   state: EntitlementState,
-  reservation: CloudQuotaReservation,
+  reservation: ProTrialReservation,
 ): EntitlementState {
-  if (reservation.usedType === 'credit') {
-    return {
-      ...state,
-      cloudCreditsBalance: state.cloudCreditsBalance + reservation.creditsCharged,
-    };
-  }
   if (reservation.usedType === 'daily_trial') {
     return {
       ...state,
-      dailyFreeCloudTrialsUsed: Math.max(0, state.dailyFreeCloudTrialsUsed - 1),
+      dailyProTrialsUsed: Math.max(0, state.dailyProTrialsUsed - 1),
     };
   }
   return state;
+}
+
+/**
+ * Loads live localized StoreKit 2 displayPrice values directly from Apple App Store (TRY/USD/EUR).
+ */
+export async function fetchStoreKitPrices(): Promise<StoreProductPriceMap> {
+  const defaults: StoreProductPriceMap = {};
+  for (const p of PRO_PLAN_PRODUCTS) {
+    defaults[p.productId] = p.fallbackPriceDisplay;
+  }
+  if (!isNativeIos()) return defaults;
+  try {
+    const res = await OmniBilling.getProducts({
+      productIds: PRO_PLAN_PRODUCTS.map((p) => p.productId),
+    });
+    for (const prod of res.products ?? []) {
+      if (prod.id && prod.displayPrice) {
+        defaults[prod.id] = prod.displayPrice;
+      }
+    }
+  } catch {
+    // Keep fallback prices if offline
+  }
+  return defaults;
 }
 
 export async function purchaseIapProduct(
@@ -113,13 +139,13 @@ export async function purchaseIapProduct(
     }
   }
 
-  // Apply entitlement based on StoreKit 2 verified product ID
-  const pack = CREDIT_PACKS.find((p) => p.productId === productId);
-  if (pack) {
+  if (productId === MONETIZATION_CONFIG.PRODUCTS.PRO_LIFETIME) {
     return {
       nextState: {
         ...state,
-        cloudCreditsBalance: state.cloudCreditsBalance + pack.credits,
+        isPro: true,
+        isLifetime: true,
+        proExpiresAt: undefined,
       },
       purchased: true,
     };
@@ -151,9 +177,11 @@ export async function restoreStorePurchases(
 ): Promise<EntitlementState> {
   if (isNativeIos()) {
     const res = await OmniBilling.restorePurchases();
+    const hasLifetime = res.restoredProductIds.includes(MONETIZATION_CONFIG.PRODUCTS.PRO_LIFETIME);
     return {
       ...state,
-      isPro: res.isPro || state.isPro,
+      isPro: res.isPro || hasLifetime || state.isPro,
+      isLifetime: hasLifetime || state.isLifetime,
       lastRestoredAt: Date.now(),
     };
   }

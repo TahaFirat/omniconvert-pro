@@ -16,8 +16,11 @@ import {
   type LocaleCode,
 } from '../core/i18n';
 import { OmniError } from '../core/errors';
-import type { EntitlementState } from '../domain/entities/billing';
-import { createInitialEntitlementState } from '../domain/entities/billing';
+import {
+  createInitialEntitlementState,
+  type EntitlementState,
+  type StoreProductPriceMap,
+} from '../domain/entities/billing';
 import type { FileInspectionResult } from '../domain/entities/format';
 import {
   DEFAULT_CONVERSION_OPTIONS,
@@ -30,7 +33,7 @@ import { conversionGraph } from '../domain/graph/conversionGraph';
 import { inspectFile } from '../domain/inspector/magicByteInspector';
 import { networkGuard } from '../infrastructure/cloud/networkGuard';
 import { bundleFilesAsZip } from '../infrastructure/local/localArchiveConverter';
-import { imagesToPdfLocally } from '../infrastructure/local/localPdfConverter';
+import { imagesToPdfLocally, mergePdfsLocally } from '../infrastructure/local/localPdfConverter';
 import {
   isNativeIos,
   OmniBilling,
@@ -45,12 +48,16 @@ import {
   type ThemeMode,
 } from '../infrastructure/storage/localDb';
 import {
+  fetchStoreKitPrices,
+  getBatchLimit,
+  getPresetLimit,
+  isProFeatureJob,
   purchaseIapProduct,
-  refundCloudQuota,
-  reserveCloudQuota,
+  refundProAccess,
+  reserveProAccess,
   restoreStorePurchases,
   shouldTriggerNaturalReviewPrompt,
-  type CloudQuotaReservation,
+  type ProTrialReservation,
 } from './billingService';
 import { buildOutputFileName, runConversionJob } from './conversionOrchestrator';
 
@@ -63,7 +70,6 @@ export interface SelectedInputItem {
 }
 
 interface AppContextValue {
-  // Navigation & UI
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   toastMessage: string | null;
@@ -73,7 +79,6 @@ interface AppContextValue {
   reviewPromptVisible: boolean;
   dismissReviewPrompt: (rateNow: boolean) => void;
 
-  // Settings & i18n
   settings: PersistedSettings;
   dict: Dictionary;
   toggleOfflineOnlyMode: () => void;
@@ -81,13 +86,11 @@ interface AppContextValue {
   setTheme: (theme: ThemeMode) => void;
   setLocale: (locale: LocaleCode) => void;
 
-  // Input selection
   selectedInputs: SelectedInputItem[];
   addFiles: (files: File[]) => Promise<void>;
   removeSelectedInput: (id: string) => void;
   clearSelectedInputs: () => void;
 
-  // Batch Queue
   jobs: ConversionJob[];
   activeJobsCount: number;
   enqueueAndRun: (params: {
@@ -100,15 +103,15 @@ interface AppContextValue {
   clearCompletedJobs: () => void;
   bundleCompletedAsZip: () => Promise<void>;
 
-  // History & Presets
   history: ConversionHistoryRecord[];
   clearHistory: () => void;
+  deleteHistoryItems: (ids: string[]) => void;
   customPresets: ConversionPreset[];
   saveCustomPreset: (name: string, targetFormat: string, options: ConversionOptions) => void;
   deleteCustomPreset: (id: string) => void;
 
-  // Billing & Storage
   entitlements: EntitlementState;
+  storePrices: StoreProductPriceMap;
   buyProduct: (productId: string) => Promise<boolean>;
   restorePurchases: () => Promise<void>;
   cacheBytes: number;
@@ -149,6 +152,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [entitlements, setEntitlements] = useState<EntitlementState>(() =>
     localDb.loadEntitlements(),
   );
+  const [storePrices, setStorePrices] = useState<StoreProductPriceMap>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [reviewPromptVisible, setReviewPromptVisible] = useState(false);
@@ -167,22 +171,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     toastTimerRef.current = window.setTimeout(() => setToastMessage(null), 3400);
   }, []);
 
-  // Sync physical NetworkGuard with offlineOnlyMode setting
+  // Load live StoreKit 2 localized prices (TRY / USD / EUR) on launch
+  useEffect(() => {
+    void fetchStoreKitPrices().then(setStorePrices);
+  }, []);
+
   useEffect(() => {
     networkGuard.setOfflineLocked(settings.offlineOnlyMode);
     localDb.saveSettings(settings);
   }, [settings]);
 
-  // Apply theme attribute & native iOS StatusBar style
   useEffect(() => {
     const effective = resolveEffectiveTheme(settings.theme);
     document.documentElement.setAttribute('data-theme', effective);
     const metaTheme = document.querySelector('meta[name="theme-color"]');
     if (metaTheme) {
-      metaTheme.setAttribute(
-        'content',
-        effective === 'light' ? '#F2F2F7' : '#000000',
-      );
+      metaTheme.setAttribute('content', effective === 'light' ? '#F2F2F7' : '#000000');
     }
     if (isNativeIos()) {
       void StatusBar.setStyle({
@@ -191,7 +195,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [settings.theme]);
 
-  // Startup orphan temp cleanup & Share Extension inbox check on iOS
   useEffect(() => {
     if (!isNativeIos()) return;
     void OmniNativeEngine.cleanupTempWorkspace().catch(() => {});
@@ -272,30 +275,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const executeJobInternal = useCallback(
-    async (job: ConversionJob) => {
+    async (job: ConversionJob, batchSize: number) => {
       const controller = new AbortController();
       abortMapRef.current.set(job.id, controller);
 
-      let cloudReservation: CloudQuotaReservation | null = null;
-      if (job.plan.requiresCloud) {
-        try {
-          const reserved = reserveCloudQuota(entitlementsRef.current, job.file.size);
-          cloudReservation = reserved.reservation;
-          setEntitlements(reserved.nextState);
-          localDb.saveEntitlements(reserved.nextState);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'Quota exceeded';
-          setJobs((prev) =>
-            prev.map((j) =>
-              j.id === job.id
-                ? { ...j, status: 'failed', errorCode: 'INSUFFICIENT_CREDITS', errorMessage: message }
-                : j,
-            ),
-          );
-          setPaywallOpen(true);
-          abortMapRef.current.delete(job.id);
-          return;
+      const usesPro = isProFeatureJob(job.plan, job.options, batchSize);
+      let reservation: ProTrialReservation = { usedType: 'free_standard' };
+      try {
+        const res = reserveProAccess(entitlementsRef.current, usesPro);
+        reservation = res.reservation;
+        if (res.nextState !== entitlementsRef.current) {
+          setEntitlements(res.nextState);
+          localDb.saveEntitlements(res.nextState);
         }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Pro required';
+        setJobs((prev) =>
+          prev.map((j) =>
+            j.id === job.id
+              ? { ...j, status: 'failed', errorCode: 'PRO_REQUIRED', errorMessage: message }
+              : j,
+          ),
+        );
+        setPaywallOpen(true);
+        abortMapRef.current.delete(job.id);
+        return;
       }
 
       setJobs((prev) =>
@@ -337,38 +341,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           sourceBytes: job.file.size,
           outputBytes: res.output.sizeBytes,
           tier: job.plan.highestTier,
-          stepsChain: [
-            job.plan.sourceFormat,
-            ...job.plan.steps.map((s) => s.target),
-          ],
+          stepsChain: [job.plan.sourceFormat, ...job.plan.steps.map((s) => s.target)],
           status: 'completed',
           durationMs: res.durationMs,
           strippedExif: job.options.stripExif,
         });
 
-        // Track local conversion count for natural 3rd-conversion review prompt
-        if (!job.plan.requiresCloud) {
-          setEntitlements((prev) => {
-            const next: EntitlementState = {
-              ...prev,
-              completedLocalConversions: prev.completedLocalConversions + 1,
-            };
-            localDb.saveEntitlements(next);
-            if (shouldTriggerNaturalReviewPrompt(next)) {
-              setReviewPromptVisible(true);
-            }
-            return next;
-          });
-        }
+        setEntitlements((prev) => {
+          const next: EntitlementState = {
+            ...prev,
+            completedLocalConversions: prev.completedLocalConversions + 1,
+          };
+          localDb.saveEntitlements(next);
+          if (shouldTriggerNaturalReviewPrompt(next)) {
+            setReviewPromptVisible(true);
+          }
+          return next;
+        });
         void triggerHapticNotification('success');
       } catch (err) {
         const isCancel = err instanceof OmniError && err.code === 'JOB_CANCELLED';
         let refunded = false;
 
-        // Credit Fairness Rule: automatic immediate refund on failure or cancel!
-        if (cloudReservation) {
+        if (reservation.usedType === 'daily_trial') {
           setEntitlements((prev) => {
-            const restored = refundCloudQuota(prev, cloudReservation!);
+            const restored = refundProAccess(prev, reservation);
             localDb.saveEntitlements(restored);
             return restored;
           });
@@ -386,7 +383,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   status: isCancel ? 'cancelled' : 'failed',
                   errorCode: errCode,
                   errorMessage: errMsg,
-                  creditRefunded: refunded,
+                  trialRefunded: refunded,
                 }
               : j,
           ),
@@ -401,10 +398,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           sourceBytes: job.file.size,
           outputBytes: 0,
           tier: job.plan.highestTier,
-          stepsChain: [
-            job.plan.sourceFormat,
-            ...job.plan.steps.map((s) => s.target),
-          ],
+          stepsChain: [job.plan.sourceFormat, ...job.plan.steps.map((s) => s.target)],
           status: isCancel ? 'cancelled' : 'failed',
           durationMs: 0,
           strippedExif: job.options.stripExif,
@@ -430,7 +424,121 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }) => {
       if (selectedInputs.length === 0) return;
 
-      // Special fast-path: Merge multiple selected images into ONE PDF locally (e.g. E-Devlet PDF preset!)
+      // Enforce generous free batch limit (3 files free, 150 files Pro)
+      const batchLimit = getBatchLimit(entitlementsRef.current);
+      if (selectedInputs.length > batchLimit && !entitlementsRef.current.isPro) {
+        showToast(dict.queue.batchLimitReached);
+        setPaywallOpen(true);
+        return;
+      }
+
+      // Fast-path 1: Merge multiple selected PDFs into ONE PDF locally
+      const allPdfs = selectedInputs.every((i) => i.inspection.detectedFormatId === 'pdf');
+      if (targetFormat === 'pdf' && options.mergeIntoSinglePdf && allPdfs && selectedInputs.length > 1) {
+        let resv: ProTrialReservation = { usedType: 'free_standard' };
+        try {
+          const r = reserveProAccess(entitlementsRef.current, true);
+          resv = r.reservation;
+          if (r.nextState !== entitlementsRef.current) {
+            setEntitlements(r.nextState);
+            localDb.saveEntitlements(r.nextState);
+          }
+        } catch {
+          setPaywallOpen(true);
+          return;
+        }
+
+        const jobId = makeId('job');
+        const first = selectedInputs[0];
+        const plan = conversionGraph.planConversion('pdf', 'pdf', {
+          offlineOnly: settings.offlineOnlyMode,
+          inspection: first.inspection,
+        });
+        if (plan) {
+          const mergedJob: ConversionJob = {
+            id: jobId,
+            createdAt: Date.now(),
+            file: first.file,
+            inspection: first.inspection,
+            targetFormat: 'pdf',
+            plan,
+            options,
+            allowCloudOverride: false,
+            status: 'running',
+            progress: 20,
+            stageLabel: `${selectedInputs.length} PDF → PDF`,
+          };
+          setJobs((prev) => [mergedJob, ...prev]);
+          setSelectedInputs([]);
+          setActiveTab('queue');
+
+          try {
+            const start = performance.now();
+            const res = await mergePdfsLocally(
+              selectedInputs.map((i) => i.file),
+              options.stripExif,
+            );
+            const fileName = buildOutputFileName(`merged_${selectedInputs.length}_pdfs`, 'pdf');
+            setJobs((prev) =>
+              prev.map((j) =>
+                j.id === jobId
+                  ? {
+                      ...j,
+                      status: 'completed',
+                      progress: 100,
+                      completedAt: Date.now(),
+                      output: {
+                        fileName,
+                        mime: res.mime,
+                        formatId: 'pdf',
+                        sizeBytes: res.blob.size,
+                        blob: res.blob,
+                      },
+                    }
+                  : j,
+              ),
+            );
+            appendHistory({
+              id: jobId,
+              timestamp: Date.now(),
+              sourceFileName: `${selectedInputs.length} PDF`,
+              sourceFormat: 'pdf',
+              targetFormat: 'pdf',
+              sourceBytes: selectedInputs.reduce((s, x) => s + x.file.size, 0),
+              outputBytes: res.blob.size,
+              tier: 2,
+              stepsChain: ['pdf', 'pdf'],
+              status: 'completed',
+              durationMs: Math.round(performance.now() - start),
+              strippedExif: options.stripExif,
+            });
+            void triggerHapticNotification('success');
+          } catch (err) {
+            if (resv.usedType === 'daily_trial') {
+              setEntitlements((prev) => {
+                const restored = refundProAccess(prev, resv);
+                localDb.saveEntitlements(restored);
+                return restored;
+              });
+            }
+            setJobs((prev) =>
+              prev.map((j) =>
+                j.id === jobId
+                  ? {
+                      ...j,
+                      status: 'failed',
+                      errorMessage: err instanceof Error ? err.message : 'PDF merge failed',
+                      trialRefunded: resv.usedType === 'daily_trial',
+                    }
+                  : j,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      // Fast-path 2: Merge multiple selected images into ONE PDF locally (Free!)
       const allImages = selectedInputs.every((i) =>
         ['png', 'jpg', 'webp', 'bmp'].includes(i.inspection.detectedFormatId),
       );
@@ -453,7 +561,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             allowCloudOverride: false,
             status: 'running',
             progress: 15,
-            stageLabel: `Merging ${selectedInputs.length} images → PDF`,
+            stageLabel: `${selectedInputs.length} → PDF`,
           };
           setJobs((prev) => [mergedJob, ...prev]);
           setSelectedInputs([]);
@@ -549,18 +657,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (newJobs.length === 0) return;
 
+      const batchSize = newJobs.length;
       setJobs((prev) => [...newJobs, ...prev]);
       setSelectedInputs([]);
       setActiveTab('queue');
 
-      // Execute up to 3 jobs concurrently without blocking UI thread
       const concurrency = 3;
       for (let i = 0; i < newJobs.length; i += concurrency) {
         const batch = newJobs.slice(i, i + concurrency);
-        await Promise.all(batch.map((job) => executeJobInternal(job)));
+        await Promise.all(batch.map((job) => executeJobInternal(job, batchSize)));
       }
     },
-    [appendHistory, executeJobInternal, selectedInputs, settings.offlineOnlyMode],
+    [appendHistory, dict.queue.batchLimitReached, executeJobInternal, selectedInputs, settings.offlineOnlyMode, showToast],
   );
 
   const cancelJob = useCallback((jobId: string) => {
@@ -581,10 +689,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         progress: 0,
         errorMessage: undefined,
         errorCode: undefined,
-        creditRefunded: false,
+        trialRefunded: false,
       };
       setJobs((prev) => prev.map((j) => (j.id === jobId ? resetJob : j)));
-      void executeJobInternal(resetJob);
+      void executeJobInternal(resetJob, 1);
     },
     [executeJobInternal, jobs],
   );
@@ -596,10 +704,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const bundleCompletedAsZip = useCallback(async () => {
     const done = jobs.filter((j) => j.status === 'completed' && j.output?.blob);
     if (done.length === 0) return;
+    if (!entitlementsRef.current.isPro && done.length > 3) {
+      setPaywallOpen(true);
+      return;
+    }
     const zipBlob = await bundleFilesAsZip(
       done.map((j) => ({ name: j.output!.fileName, blob: j.output!.blob! })),
     );
-    await shareOrDownloadOutput(zipBlob, `OmniConvert_Batch_${Date.now()}.zip`);
+    await shareOrDownloadOutput(zipBlob, `OmniConvert_${Date.now()}.zip`);
     void triggerHapticNotification('success');
   }, [jobs]);
 
@@ -609,12 +721,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCacheBytes(localDb.estimateStorageBytes());
   }, []);
 
+  const deleteHistoryItems = useCallback((ids: string[]) => {
+    const removeSet = new Set(ids);
+    setHistory((prev) => {
+      const next = prev.filter((r) => !removeSet.has(r.id));
+      localDb.saveHistory(next);
+      setCacheBytes(localDb.estimateStorageBytes());
+      return next;
+    });
+  }, []);
+
   const saveCustomPreset = useCallback(
     (name: string, targetFormat: string, options: ConversionOptions) => {
+      if (customPresets.length >= getPresetLimit(entitlementsRef.current)) {
+        showToast(dict.history.presetLimitReached);
+        setPaywallOpen(true);
+        return;
+      }
       const preset: ConversionPreset = {
         id: makeId('preset'),
         customName: name.trim(),
-        description: `${targetFormat.toUpperCase()} • Q${options.quality}%${options.stripExif ? ' • EXIF Clean' : ''}`,
+        description: `${targetFormat.toUpperCase()} • ${options.quality}%${options.stripExif ? ' • EXIF' : ''}`,
         targetFormat,
         compatibleCategories: ['image', 'pdf', 'document', 'data', 'archive', 'audio', 'video'],
         options,
@@ -628,7 +755,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       showToast(dict.history.presetSaved);
     },
-    [dict.history.presetSaved, showToast],
+    [customPresets.length, dict.history.presetLimitReached, dict.history.presetSaved, showToast],
   );
 
   const deleteCustomPreset = useCallback((id: string) => {
@@ -641,16 +768,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const buyProduct = useCallback(
     async (productId: string): Promise<boolean> => {
-      const res = await purchaseIapProduct(entitlementsRef.current, productId);
-      if (res.purchased) {
-        setEntitlements(res.nextState);
-        localDb.saveEntitlements(res.nextState);
-        showToast(dict.paywall.purchaseSuccess);
-        void triggerHapticNotification('success');
+      try {
+        const res = await purchaseIapProduct(entitlementsRef.current, productId);
+        if (res.purchased) {
+          setEntitlements(res.nextState);
+          localDb.saveEntitlements(res.nextState);
+          showToast(dict.paywall.purchaseSuccess);
+          void triggerHapticNotification('success');
+        }
+        return res.purchased;
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : dict.paywall.purchaseFailed);
+        return false;
       }
-      return res.purchased;
     },
-    [dict.paywall.purchaseSuccess, showToast],
+    [dict.paywall.purchaseFailed, dict.paywall.purchaseSuccess, showToast],
   );
 
   const restorePurchases = useCallback(async () => {
@@ -728,10 +860,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     bundleCompletedAsZip,
     history,
     clearHistory,
+    deleteHistoryItems,
     customPresets,
     saveCustomPreset,
     deleteCustomPreset,
     entitlements,
+    storePrices,
     buyProduct,
     restorePurchases,
     cacheBytes,

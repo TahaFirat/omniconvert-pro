@@ -49,6 +49,40 @@ function escapeHtml(str: string): string {
 }
 
 /**
+ * Extracts paragraphs, headings, and table lines from a real .docx (word/document.xml) on-device.
+ */
+export function extractDocxParagraphs(bytes: Uint8Array): string[] {
+  const files = safeUnzip(bytes);
+  const docEntry = files['word/document.xml'];
+  if (!docEntry) {
+    throw new OmniError('DOCX_PARSE_ERROR', 'word/document.xml not found inside DOCX archive.');
+  }
+  const xml = new TextDecoder('utf-8', { fatal: false }).decode(docEntry);
+  // Split by Word paragraph tags <w:p ...>...</w:p> and pull all <w:t> text runs cleanly
+  const paragraphs: string[] = [];
+  const pRegex = /<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g;
+  const tRegex = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g;
+
+  let pMatch: RegExpExecArray | null;
+  while ((pMatch = pRegex.exec(xml)) !== null) {
+    const pBody = pMatch[1];
+    let line = '';
+    let tMatch: RegExpExecArray | null;
+    while ((tMatch = tRegex.exec(pBody)) !== null) {
+      line += tMatch[1]
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&apos;', "'");
+    }
+    const cleaned = line.trim();
+    if (cleaned) paragraphs.push(cleaned);
+  }
+  return paragraphs;
+}
+
+/**
  * Extracts tabular rows from .xlsx (Office Open XML) or .ods (OpenDocument) locally using fflate + XMLParser.
  */
 function extractSpreadsheetRows(bytes: Uint8Array, format: 'xlsx' | 'ods'): Record<string, string>[] {
@@ -162,6 +196,25 @@ export async function convertDataLocally(
   sourceFormat: string,
   targetFormat: string,
 ): Promise<{ blob: Blob; mime: string; previewText: string }> {
+  // Handle binary Word documents (.docx) 100% locally!
+  if (sourceFormat === 'docx') {
+    const bytes = new Uint8Array(await inputBlob.arrayBuffer());
+    const paragraphs = extractDocxParagraphs(bytes);
+    if (targetFormat === 'txt') {
+      const text = paragraphs.join('\n\n');
+      return { blob: new Blob([text], { type: 'text/plain;charset=utf-8' }), mime: 'text/plain', previewText: text };
+    }
+    if (targetFormat === 'md') {
+      const md = paragraphs.join('\n\n');
+      return { blob: new Blob([md], { type: 'text/markdown;charset=utf-8' }), mime: 'text/markdown', previewText: md };
+    }
+    if (targetFormat === 'html') {
+      const body = paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join('\n');
+      const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,sans-serif;max-width:740px;margin:2rem auto;padding:0 1rem;line-height:1.6}</style></head><body>${body}</body></html>`;
+      return { blob: new Blob([html], { type: 'text/html;charset=utf-8' }), mime: 'text/html', previewText: html };
+    }
+  }
+
   // Handle binary spreadsheets (XLSX / ODS) first
   if (sourceFormat === 'xlsx' || sourceFormat === 'ods') {
     const bytes = new Uint8Array(await inputBlob.arrayBuffer());
@@ -174,6 +227,15 @@ export async function convertDataLocally(
       const text = Papa.unparse(rows, { delimiter: targetFormat === 'tsv' ? '\t' : ',' });
       const mime = targetFormat === 'tsv' ? 'text/tab-separated-values' : 'text/csv';
       return { blob: new Blob([text], { type: mime }), mime, previewText: text };
+    }
+    if (targetFormat === 'html') {
+      const cols = rows.length > 0 ? Object.keys(rows[0]) : [];
+      const thead = cols.map((c) => `<th>${escapeHtml(c)}</th>`).join('');
+      const tbody = rows
+        .map((r) => `<tr>${cols.map((c) => `<td>${escapeHtml(String(r[c] ?? ''))}</td>`).join('')}</tr>`)
+        .join('\n');
+      const html = `<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:sans-serif}th,td{border:1px solid #cbd5e1;padding:6px 10px}</style></head><body><table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table></body></html>`;
+      return { blob: new Blob([html], { type: 'text/html;charset=utf-8' }), mime: 'text/html', previewText: html };
     }
   }
 

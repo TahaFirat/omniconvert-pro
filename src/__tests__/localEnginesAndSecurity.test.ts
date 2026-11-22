@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { zipSync } from 'fflate';
+import { PDFDocument } from 'pdf-lib';
 import { OfflineLockedError, ZipBombError } from '../core/errors';
 import {
-  refundCloudQuota,
-  reserveCloudQuota,
+  refundProAccess,
+  reserveProAccess,
   shouldTriggerNaturalReviewPrompt,
 } from '../application/billingService';
 import { createInitialEntitlementState } from '../domain/entities/billing';
@@ -16,15 +17,20 @@ import {
 } from '../infrastructure/local/localArchiveConverter';
 import { encodeWavFromChannels } from '../infrastructure/local/localAudioConverter';
 import { convertDataLocally } from '../infrastructure/local/localDataConverter';
-import { textToPdfLocally } from '../infrastructure/local/localPdfConverter';
+import {
+  mergePdfsLocally,
+  parsePageRange,
+  textToPdfLocally,
+  transformPdfLocally,
+} from '../infrastructure/local/localPdfConverter';
 
 describe('Physical Network Guard & Local Tier 2 Engines', () => {
   it('physically blocks every outbound fetch when Offline Privacy Mode is locked', async () => {
     const guard = new NetworkGuard();
     guard.setOfflineLocked(true);
-    await expect(guard.guardedFetch('https://api.omniconvert.app/v1/uploads', undefined, false)).rejects.toBeInstanceOf(
-      OfflineLockedError,
-    );
+    await expect(
+      guard.guardedFetch('https://api.omniconvert.app/v1/uploads', undefined, false),
+    ).rejects.toBeInstanceOf(OfflineLockedError);
   });
 
   it('converts JSON -> YAML -> TOML -> CSV -> JSON faithfully on-device', async () => {
@@ -45,7 +51,7 @@ describe('Physical Network Guard & Local Tier 2 Engines', () => {
     expect(csvRes.previewText).toContain('Istanbul,99');
   });
 
-  it('converts Markdown -> HTML -> Markdown locally', async () => {
+  it('converts Markdown -> HTML -> Markdown and real DOCX -> TXT/HTML locally', async () => {
     const mdBlob = new Blob(['# OmniConvert\n\n**Local-First** converter']);
     const htmlRes = await convertDataLocally(mdBlob, 'md', 'html');
     expect(htmlRes.previewText).toContain('<h1>OmniConvert</h1>');
@@ -53,14 +59,33 @@ describe('Physical Network Guard & Local Tier 2 Engines', () => {
 
     const backMd = await convertDataLocally(htmlRes.blob, 'html', 'md');
     expect(backMd.previewText).toContain('# OmniConvert');
+
+    const docxXml =
+      '<w:document><w:body><w:p><w:r><w:t>Merhaba Word Belgesi</w:t></w:r></w:p><w:p><w:r><w:t>Ikinci paragraf</w:t></w:r></w:p></w:body></w:document>';
+    const docxZip = zipSync({ 'word/document.xml': new TextEncoder().encode(docxXml) });
+    const docxTxt = await convertDataLocally(new Blob([docxZip]), 'docx', 'txt');
+    expect(docxTxt.previewText).toContain('Merhaba Word Belgesi');
+    expect(docxTxt.previewText).toContain('Ikinci paragraf');
   });
 
-  it('creates a valid %PDF- binary document from plain text on-device', async () => {
-    const res = await textToPdfLocally('Merhaba OmniConvert Pro\nCihaz içi çevrimdışı PDF!', DEFAULT_CONVERSION_OPTIONS);
-    expect(res.mime).toBe('application/pdf');
-    const bytes = new Uint8Array(await res.blob.arrayBuffer());
-    const sig = new TextDecoder().decode(bytes.subarray(0, 5));
-    expect(sig).toBe('%PDF-');
+  it('creates, merges, splits by page range, and rotates PDFs 100% locally', async () => {
+    const pdf1 = await textToPdfLocally('Page One', DEFAULT_CONVERSION_OPTIONS);
+    const pdf2 = await textToPdfLocally('Page Two', DEFAULT_CONVERSION_OPTIONS);
+    const pdf3 = await textToPdfLocally('Page Three', DEFAULT_CONVERSION_OPTIONS);
+
+    const merged = await mergePdfsLocally([pdf1.blob, pdf2.blob, pdf3.blob], true);
+    const mergedDoc = await PDFDocument.load(new Uint8Array(await merged.blob.arrayBuffer()));
+    expect(mergedDoc.getPageCount()).toBe(3);
+
+    expect(parsePageRange('1, 3', 3)).toEqual([0, 2]);
+    const splitRotated = await transformPdfLocally(merged.blob, {
+      ...DEFAULT_CONVERSION_OPTIONS,
+      pdfPageRange: '1, 3',
+      pdfRotateDegrees: 90,
+    });
+    const outDoc = await PDFDocument.load(new Uint8Array(await splitRotated.blob.arrayBuffer()));
+    expect(outDoc.getPageCount()).toBe(2);
+    expect(outDoc.getPage(0).getRotation().angle).toBe(90);
   });
 
   it('converts ZIP -> TAR -> TGZ -> ZIP cleanly and rejects zip-bombs & path traversal', async () => {
@@ -72,13 +97,11 @@ describe('Physical Network Guard & Local Tier 2 Engines', () => {
     const extracted = safeUnzip(new Uint8Array(await backZip.blob.arrayBuffer()));
     expect(new TextDecoder().decode(extracted['hello.txt'])).toBe('OmniConvert Local Archive');
 
-    // Path traversal attack rejected
-    expect(() =>
-      guardAgainstZipBomb(100, { '../../etc/passwd': new Uint8Array(10) }),
-    ).toThrow(ZipBombError);
+    expect(() => guardAgainstZipBomb(100, { '../../etc/passwd': new Uint8Array(10) })).toThrow(
+      ZipBombError,
+    );
 
-    // 100:1 Zip-bomb expansion ratio rejected
-    const huge = new Uint8Array(2 * 1024 * 1024); // 2 MB expanded from 10 KB compressed = 200:1
+    const huge = new Uint8Array(2 * 1024 * 1024);
     expect(() => guardAgainstZipBomb(10_000, { 'bomb.txt': huge })).toThrow(ZipBombError);
   });
 
@@ -90,26 +113,32 @@ describe('Physical Network Guard & Local Tier 2 Engines', () => {
   });
 });
 
-describe('Fair Zero-Trap Billing & Credit Refund Invariants', () => {
-  it('grants 3 daily free cloud trials, uses never-expiring credits afterwards, and refunds immediately on failure', () => {
+describe('Fair Balanced Pro Monetization & Trial Refund Invariants', () => {
+  it('keeps everyday conversions unlimited, grants 3 daily free Pro trials, and refunds on failure', () => {
     let state = createInitialEntitlementState();
-    state.cloudCreditsBalance = 10;
 
-    // Trial 1, 2, 3 (<= 25 MB)
+    // Standard conversions NEVER spend trials
+    for (let i = 0; i < 10; i++) {
+      const std = reserveProAccess(state, false);
+      expect(std.reservation.usedType).toBe('free_standard');
+      state = std.nextState;
+    }
+    expect(state.dailyProTrialsUsed).toBe(0);
+
+    // 3 daily free Pro feature trials
     for (let i = 0; i < 3; i++) {
-      const r = reserveCloudQuota(state, 1024);
+      const r = reserveProAccess(state, true);
       expect(r.reservation.usedType).toBe('daily_trial');
       state = r.nextState;
     }
+    expect(state.dailyProTrialsUsed).toBe(3);
 
-    // 4th cloud call draws 1 credit
-    const creditRes = reserveCloudQuota(state, 1024);
-    expect(creditRes.reservation.usedType).toBe('credit');
-    expect(creditRes.nextState.cloudCreditsBalance).toBe(9);
+    // 4th Pro trial blocked until next day or Pro upgrade
+    expect(() => reserveProAccess(state, true)).toThrow();
 
-    // Failure automatically refunds credit back to 10
-    const refunded = refundCloudQuota(creditRes.nextState, creditRes.reservation);
-    expect(refunded.cloudCreditsBalance).toBe(10);
+    // Failure refunds trial immediately
+    const refunded = refundProAccess(state, { usedType: 'daily_trial' });
+    expect(refunded.dailyProTrialsUsed).toBe(2);
   });
 
   it('triggers natural App Store review prompt ONLY after 3rd successful on-device conversion', () => {

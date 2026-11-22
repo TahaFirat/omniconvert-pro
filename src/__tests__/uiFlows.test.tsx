@@ -41,18 +41,15 @@ describe('OmniConvert Pro UI & Store Compliance Flows', () => {
     });
   });
 
-  it('prompts confirmation when tapping a Cloud target while Offline Mode is active', async () => {
+  it('opens balanced 3-tier Pro Paywall (Yearly, Lifetime, Monthly) with Restore Purchases', async () => {
     render(<App />);
-    fireEvent.click(screen.getByTestId('offline-lock-toggle'));
+    fireEvent.click(screen.getByTestId('nav-settings'));
+    fireEvent.click(await screen.findByTestId('open-paywall-btn'));
 
-    const fileInput = screen.getByTestId('file-input');
-    fireEvent.change(fileInput, { target: { files: [createSampleJsonFile()] } });
-    fireEvent.click(await screen.findByTestId('choose-target-btn'));
-
-    const parquetBtn = await screen.findByTestId('target-all-parquet');
-    fireEvent.click(parquetBtn);
-
-    expect(await screen.findByTestId('confirm-temp-cloud-btn')).toBeInTheDocument();
+    expect(await screen.findByTestId('plan-yearly')).toBeInTheDocument();
+    expect(screen.getByTestId('plan-lifetime')).toBeInTheDocument();
+    expect(screen.getByTestId('plan-monthly')).toBeInTheDocument();
+    expect(screen.getByTestId('paywall-restore-btn')).toBeInTheDocument();
   });
 
   it('exposes Restore Purchases and Open Source Licenses in Settings', async () => {

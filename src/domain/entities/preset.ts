@@ -2,7 +2,7 @@ import type { ConversionOptions } from './job';
 
 export interface ConversionPreset {
   id: string;
-  nameKey?: 'whatsappShrink' | 'edevletPdf' | 'webOptimize' | 'losslessArchive' | 'ocrScan';
+  nameKey?: 'whatsappShrink' | 'edevletPdf' | 'pdfStudio' | 'videoAudio' | 'videoGif' | 'ocrScan';
   customName?: string;
   description?: string;
   targetFormat: string;

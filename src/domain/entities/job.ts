@@ -8,7 +8,11 @@ export interface ConversionOptions {
   password?: string;
   ocrLanguage: 'tr' | 'en' | 'de' | 'es';
   mergeIntoSinglePdf?: boolean;
-  sampleRate?: number; // audio resampling
+  pdfPageRange?: string; // e.g. "1-3, 5"
+  pdfRotateDegrees?: 0 | 90 | 180 | 270;
+  videoResolution?: '1080p' | '720p' | '480p';
+  ringtoneDurationSec?: number; // max 30s for M4R
+  sampleRate?: number;
 }
 
 export const DEFAULT_CONVERSION_OPTIONS: ConversionOptions = {
@@ -17,6 +21,9 @@ export const DEFAULT_CONVERSION_OPTIONS: ConversionOptions = {
   ocrLanguage: 'tr',
   dpi: 150,
   mergeIntoSinglePdf: false,
+  pdfRotateDegrees: 0,
+  videoResolution: '720p',
+  ringtoneDurationSec: 30,
 };
 
 export interface ConversionStep {
@@ -35,6 +42,7 @@ export interface ConversionPlan {
   steps: ConversionStep[];
   highestTier: ConversionTier;
   requiresCloud: boolean;
+  usesProFeature?: boolean;
   totalWeight: number;
   estimatedMs: number;
   warnings: WarningCode[];
@@ -72,7 +80,7 @@ export interface ConversionJob {
   errorMessage?: string;
   errorCode?: string;
   cloudWiped?: boolean;
-  creditRefunded?: boolean;
+  trialRefunded?: boolean;
 }
 
 export interface ConversionHistoryRecord {

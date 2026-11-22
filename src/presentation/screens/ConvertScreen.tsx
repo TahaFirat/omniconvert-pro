@@ -1,14 +1,15 @@
 import React, { useRef, useState } from 'react';
 import {
-  Archive,
   Camera,
   ChevronRight,
   ClipboardPaste,
   FilePlus2,
   FileText,
+  Film,
   Image as ImageIcon,
+  Layers,
+  Music,
   ScanText,
-  Sparkles,
   X,
 } from 'lucide-react';
 import { useApp } from '../../application/AppContext';
@@ -26,10 +27,12 @@ function getPresetIcon(presetId: string) {
       return <ImageIcon size={18} strokeWidth={1.9} />;
     case 'preset_edevlet_pdf':
       return <FileText size={18} strokeWidth={1.9} />;
-    case 'preset_web_optimize':
-      return <Sparkles size={18} strokeWidth={1.9} />;
-    case 'preset_lossless_archive':
-      return <Archive size={18} strokeWidth={1.9} />;
+    case 'preset_pdf_studio':
+      return <Layers size={18} strokeWidth={1.9} />;
+    case 'preset_video_audio':
+      return <Music size={18} strokeWidth={1.9} />;
+    case 'preset_video_gif':
+      return <Film size={18} strokeWidth={1.9} />;
     default:
       return <ScanText size={18} strokeWidth={1.9} />;
   }
@@ -85,6 +88,8 @@ export const ConvertScreen: React.FC = () => {
     setPresetOptions(preset.options);
     if (selectedInputs.length > 0) {
       setPickerOpen(true);
+    } else if (preset.id === 'preset_video_audio' || preset.id === 'preset_video_gif') {
+      mediaInputRef.current?.click();
     } else {
       fileInputRef.current?.click();
     }
@@ -92,7 +97,6 @@ export const ConvertScreen: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-      {/* Hidden file inputs */}
       <input
         ref={fileInputRef}
         data-testid="file-input"
@@ -118,7 +122,7 @@ export const ConvertScreen: React.FC = () => {
         onChange={(e) => void handleFileInputChange(e)}
       />
 
-      {/* Clean Primary Picker Surface */}
+      {/* Primary Picker Surface */}
       <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <button
           type="button"
@@ -161,7 +165,7 @@ export const ConvertScreen: React.FC = () => {
           </div>
         </button>
 
-        {/* Secondary Input Shortcuts — Compact 3-Column Strip */}
+        {/* Compact 3-Column Strip */}
         <div
           style={{
             display: 'grid',
@@ -231,7 +235,7 @@ export const ConvertScreen: React.FC = () => {
         </div>
       </section>
 
-      {/* Selected Files Group */}
+      {/* Selected Files */}
       {selectedInputs.length > 0 && (
         <section>
           <div
@@ -362,7 +366,7 @@ export const ConvertScreen: React.FC = () => {
         </section>
       )}
 
-      {/* Clean iOS Inset Grouped Presets */}
+      {/* Quick Tools (Inset Grouped) */}
       <section>
         <h2 className="section-header">{dict.convert.presetsTitle}</h2>
         <div className="ios-group">

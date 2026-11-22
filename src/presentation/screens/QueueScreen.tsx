@@ -8,6 +8,15 @@ import { FilePreviewModal } from '../components/FilePreviewModal';
 import { formatFileSize } from '../components/formatBytes';
 import { PrivacyBadge } from '../components/PrivacyBadge';
 
+function formatSizeComparison(beforeBytes: number, afterBytes?: number): string {
+  if (!afterBytes || afterBytes <= 0) return formatFileSize(beforeBytes);
+  const diffPct = Math.round(((beforeBytes - afterBytes) / Math.max(1, beforeBytes)) * 100);
+  if (diffPct >= 5) {
+    return `${formatFileSize(beforeBytes)} → ${formatFileSize(afterBytes)} (-%${diffPct})`;
+  }
+  return `${formatFileSize(beforeBytes)} → ${formatFileSize(afterBytes)}`;
+}
+
 export const QueueScreen: React.FC = () => {
   const {
     dict,
@@ -83,7 +92,7 @@ export const QueueScreen: React.FC = () => {
                       {job.output?.fileName ?? job.file.name}
                     </div>
                     <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                      {statusText} • {formatFileSize(job.output?.sizeBytes ?? job.file.size)}
+                      {statusText} • {formatSizeComparison(job.file.size, job.output?.sizeBytes)}
                       {job.status === 'running' && job.etaSeconds
                         ? ` • ${interpolate(dict.queue.etaSeconds, { sec: job.etaSeconds })}`
                         : ''}
@@ -101,7 +110,7 @@ export const QueueScreen: React.FC = () => {
                 {job.errorMessage && (
                   <div style={{ fontSize: '0.78rem', color: 'var(--red-text)' }}>
                     {job.errorMessage}
-                    {job.creditRefunded ? ` (${dict.queue.creditRefunded})` : ''}
+                    {job.trialRefunded ? ` (${dict.queue.trialRefunded})` : ''}
                   </div>
                 )}
 

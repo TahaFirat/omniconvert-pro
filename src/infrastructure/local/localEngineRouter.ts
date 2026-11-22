@@ -1,6 +1,12 @@
+import { Directory, Filesystem } from '@capacitor/filesystem';
 import { JobCancelledError, OmniError } from '../../core/errors';
 import type { ConversionOptions, ConversionStep } from '../../domain/entities/job';
-import { isNativeIos, OmniNativeEngine, uint8ToBase64 } from '../native/omniNativeBridge';
+import {
+  base64ToUint8,
+  isNativeIos,
+  OmniNativeEngine,
+  uint8ToBase64,
+} from '../native/omniNativeBridge';
 import { convertArchiveLocally } from './localArchiveConverter';
 import { convertAudioLocally } from './localAudioConverter';
 import { convertDataLocally } from './localDataConverter';
@@ -9,6 +15,7 @@ import {
   convertPdfOutputLocally,
   imagesToPdfLocally,
   textToPdfLocally,
+  transformPdfLocally,
 } from './localPdfConverter';
 
 export interface LocalStepResult {
@@ -18,8 +25,66 @@ export interface LocalStepResult {
 }
 
 /**
+ * Stages a binary media Blob to Capacitor's native Cache dir, calls Swift AVFoundation/ImageIO,
+ * reads the converted output back, and guarantees zero residual temp files in `finally`.
+ */
+async function runNativeIosMediaConversion(
+  inputBlob: Blob,
+  sourceFormat: string,
+  targetFormat: string,
+  options: ConversionOptions,
+): Promise<LocalStepResult> {
+  const tempFileName = `omni_media_in_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${sourceFormat}`;
+  const inputBytes = new Uint8Array(await inputBlob.arrayBuffer());
+  const inputB64 = await uint8ToBase64(inputBytes);
+
+  const written = await Filesystem.writeFile({
+    path: tempFileName,
+    data: inputB64,
+    directory: Directory.Cache,
+  });
+  const nativePath = written.uri.replace(/^file:\/\//, '');
+
+  try {
+    if (targetFormat === 'gif') {
+      const gifRes = await OmniNativeEngine.videoToGif({
+        inputPath: nativePath,
+        fps: 10,
+        maxDurationSec: 12,
+        maxDimension: options.maxDimension ?? 480,
+      });
+      const outBytes = base64ToUint8(gifRes.base64Data);
+      const copy = new Uint8Array(outBytes.byteLength);
+      copy.set(outBytes);
+      return { blob: new Blob([copy], { type: 'image/gif' }), mime: 'image/gif' };
+    }
+
+    const mediaRes = await OmniNativeEngine.convertMedia({
+      inputPath: nativePath,
+      targetFormat,
+      resolution: options.videoResolution ?? '720p',
+      maxDurationSec: targetFormat === 'm4r' ? Math.min(30, options.ringtoneDurationSec ?? 30) : undefined,
+    });
+
+    if (mediaRes.base64Data) {
+      const outBytes = base64ToUint8(mediaRes.base64Data);
+      const copy = new Uint8Array(outBytes.byteLength);
+      copy.set(outBytes);
+      return { blob: new Blob([copy], { type: mediaRes.mime }), mime: mediaRes.mime };
+    }
+
+    const readBack = await Filesystem.readFile({ path: mediaRes.outputPath });
+    const outBytes = base64ToUint8(String(readBack.data));
+    const copy = new Uint8Array(outBytes.byteLength);
+    copy.set(outBytes);
+    return { blob: new Blob([copy], { type: mediaRes.mime }), mime: mediaRes.mime };
+  } finally {
+    await Filesystem.deleteFile({ path: tempFileName, directory: Directory.Cache }).catch(() => {});
+  }
+}
+
+/**
  * Executes a single Tier 1 (Native Hardware) or Tier 2 (On-Device Local) conversion step.
- * Respects cooperative cancellation via AbortSignal.
  */
 export async function executeLocalStep(params: {
   inputBlob: Blob;
@@ -39,9 +104,21 @@ export async function executeLocalStep(params: {
       return convertImageLocally(inputBlob, step.source, step.target, options);
 
     case 'local_pdf':
+      if (step.source === 'pdf' && step.target === 'pdf') {
+        return transformPdfLocally(inputBlob, options);
+      }
       if (step.source === 'txt' || step.source === 'md') {
         const text = await inputBlob.text();
         return textToPdfLocally(text, options);
+      }
+      if (['docx', 'rtf', 'html', 'xlsx', 'ods', 'csv'].includes(step.source)) {
+        const intermediateTarget = step.source === 'xlsx' || step.source === 'ods' ? 'csv' : 'txt';
+        const extracted = await convertDataLocally(inputBlob, step.source, intermediateTarget);
+        return textToPdfLocally(extracted.previewText, options);
+      }
+      if (step.source === 'epub') {
+        const extracted = await convertArchiveLocally(inputBlob, fileName, 'epub', 'txt');
+        return textToPdfLocally(extracted.previewText ?? '', options);
       }
       return imagesToPdfLocally([{ blob: inputBlob, formatId: step.source }], options);
 
@@ -68,27 +145,20 @@ export async function executeLocalStep(params: {
       }
       throw new OmniError(
         'IOS_VISION_REQUIRED',
-        'Offline OCR runs natively on-device using Apple Vision (VNRecognizeTextRequest).',
+        'Offline OCR runs natively on-device using Apple Vision on iPhone and iPad.',
       );
     }
 
     case 'ios_avfoundation':
-      if (!isNativeIos()) {
-        if (step.target === 'wav') {
-          return convertAudioLocally(inputBlob, 'wav', options);
-        }
-        throw new OmniError(
-          'IOS_AVFOUNDATION_REQUIRED',
-          'Hardware H.264/HEVC & AAC transcoding runs via Apple AVFoundation / VideoToolbox on iOS.',
-        );
+      if (isNativeIos()) {
+        return runNativeIosMediaConversion(inputBlob, step.source, step.target, options);
       }
-      // On iOS device, convertAudioLocally handles WAV or AVFoundation handles video/M4A
       if (step.target === 'wav') {
         return convertAudioLocally(inputBlob, 'wav', options);
       }
       throw new OmniError(
-        'AVFOUNDATION_PATH_REQUIRED',
-        'Hardware media conversion requires native file URI via Files picker.',
+        'IOS_AVFOUNDATION_REQUIRED',
+        'Hardware video/audio conversion runs natively on iPhone and iPad.',
       );
 
     case 'local_archive':

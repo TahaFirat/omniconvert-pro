@@ -196,8 +196,8 @@ export async function convertArchiveLocally(
     }
   }
 
-  // EPUB -> Plain Text (Tier 2 ZIP-based text extraction)
-  if (sourceFormat === 'epub' && targetFormat === 'txt') {
+  // EPUB -> Plain Text or HTML (Tier 2 ZIP-based extraction)
+  if (sourceFormat === 'epub' && (targetFormat === 'txt' || targetFormat === 'html')) {
     const entries = safeUnzip(inputBytes);
     const decoder = new TextDecoder();
     const htmlKeys = Object.keys(entries)
@@ -213,6 +213,15 @@ export async function convertArchiveLocally(
         .trim();
     });
     const text = chunks.filter(Boolean).join('\n\n');
+    if (targetFormat === 'html') {
+      const body = chunks.filter(Boolean).map((p) => `<p>${p}</p>`).join('\n');
+      const htmlDoc = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,sans-serif;max-width:740px;margin:2rem auto;padding:0 1rem;line-height:1.6}</style></head><body>${body}</body></html>`;
+      return {
+        blob: new Blob([htmlDoc], { type: 'text/html;charset=utf-8' }),
+        mime: 'text/html',
+        previewText: htmlDoc,
+      };
+    }
     return {
       blob: new Blob([text], { type: 'text/plain;charset=utf-8' }),
       mime: 'text/plain',

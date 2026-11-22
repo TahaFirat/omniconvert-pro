@@ -9,6 +9,8 @@ import {
   X,
 } from 'lucide-react';
 import { useApp, type SelectedInputItem } from '../../application/AppContext';
+import { getRemainingDailyProTrials, isProFeatureJob } from '../../application/billingService';
+import { APP_CONFIG } from '../../core/constants';
 import { interpolate } from '../../core/i18n';
 import {
   DEFAULT_CONVERSION_OPTIONS,
@@ -33,12 +35,14 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
   initialOptions,
   onClose,
 }) => {
-  const { settings, dict, enqueueAndRun, saveCustomPreset } = useApp();
+  const { settings, dict, entitlements, enqueueAndRun, saveCustomPreset } = useApp();
   const primary = inputs[0];
 
   const [query, setQuery] = useState('');
   const [selectedTarget, setSelectedTarget] = useState<string>(initialTarget ?? '');
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(
+    primary?.inspection.detectedFormatId === 'pdf' && initialTarget === 'pdf',
+  );
   const [options, setOptions] = useState<ConversionOptions>({
     ...DEFAULT_CONVERSION_OPTIONS,
     stripExif: settings.defaultStripExif,
@@ -54,6 +58,7 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
     return conversionGraph.getReachableTargets(
       primary.inspection.detectedFormatId,
       settings.offlineOnlyMode && !allowTempCloud,
+      APP_CONFIG.cloudWorkerEnabled,
     );
   }, [primary, settings.offlineOnlyMode, allowTempCloud]);
 
@@ -126,6 +131,12 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
   const allImages = inputs.every((i) =>
     ['png', 'jpg', 'webp', 'bmp'].includes(i.inspection.detectedFormatId),
   );
+  const allPdfs = inputs.every((i) => i.inspection.detectedFormatId === 'pdf');
+  const isPdfToolkit = primary.inspection.detectedFormatId === 'pdf' && effectiveTarget === 'pdf';
+  const isVideoSource = ['mp4', 'mov', 'm4v'].includes(primary.inspection.detectedFormatId);
+
+  const activeUsesPro = activePlan ? isProFeatureJob(activePlan, options, inputs.length) : false;
+  const remainingTrials = getRemainingDailyProTrials(entitlements);
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={dict.targetPicker.title}>
@@ -171,7 +182,7 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
           </div>
         )}
 
-        {/* iOS Rounded Search Field */}
+        {/* Search */}
         <div style={{ position: 'relative' }}>
           <Search
             size={15}
@@ -205,6 +216,7 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
               {recommended.map(({ format, plan }) => {
                 const selected = format.id === effectiveTarget;
                 const locked = plan.blockedByOfflineLock && !allowTempCloud;
+                const needsPro = isProFeatureJob(plan, options, inputs.length);
                 return (
                   <button
                     key={format.id}
@@ -234,10 +246,10 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
                       style={{
                         fontSize: '0.7rem',
                         fontWeight: 500,
-                        color: plan.requiresCloud ? 'var(--indigo-text)' : 'var(--green-text)',
+                        color: needsPro && !entitlements.isPro ? 'var(--accent)' : 'var(--green-text)',
                       }}
                     >
-                      {plan.requiresCloud ? dict.badges.cloudShort : dict.badges.localShort}
+                      {needsPro && !entitlements.isPro ? dict.badges.proTag : dict.badges.localShort}
                     </span>
                   </button>
                 );
@@ -261,13 +273,14 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))',
                 gap: 8,
-                maxHeight: 176,
+                maxHeight: 170,
                 overflowY: 'auto',
               }}
             >
               {filteredTargets.map(({ format, plan }) => {
                 const selected = format.id === effectiveTarget;
                 const locked = plan.blockedByOfflineLock && !allowTempCloud;
+                const needsPro = isProFeatureJob(plan, options, inputs.length);
                 return (
                   <button
                     key={format.id}
@@ -296,10 +309,10 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
                     <span
                       style={{
                         fontSize: '0.68rem',
-                        color: plan.requiresCloud ? 'var(--indigo-text)' : 'var(--text-muted)',
+                        color: needsPro && !entitlements.isPro ? 'var(--accent)' : 'var(--text-muted)',
                       }}
                     >
-                      {plan.requiresCloud ? dict.badges.cloudShort : dict.badges.localShort}
+                      {needsPro && !entitlements.isPro ? dict.badges.proTag : dict.badges.localShort}
                     </span>
                   </button>
                 );
@@ -308,7 +321,7 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
           )}
         </div>
 
-        {/* Compact Multi-Hop / Tier Summary */}
+        {/* Route Summary */}
         {activePlan && (
           <div
             style={{
@@ -335,12 +348,17 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
           </div>
         )}
 
-        {/* Upfront Warnings */}
+        {/* Calm Free Pro Trial Notice */}
+        {activeUsesPro && !entitlements.isPro && (
+          <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', padding: '0 2px' }}>
+            {interpolate(dict.targetPicker.proTrialHint, { count: remainingTrials })}
+          </div>
+        )}
+
         {activePlan && activePlan.warnings.length > 0 && (
           <WarningCard codes={activePlan.warnings} />
         )}
 
-        {/* Password Field (Only when encrypted) */}
         {primary.inspection.isEncrypted && (
           <div>
             <label
@@ -388,6 +406,65 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
                 gap: 14,
               }}
             >
+              {/* PDF Split / Rotate Studio Controls */}
+              {isPdfToolkit && (
+                <div className="grid-2">
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.76rem', color: 'var(--text-muted)', marginBottom: 4 }}>
+                      {dict.targetPicker.pdfPageRange}
+                    </label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      placeholder={dict.targetPicker.pdfPageRangePlaceholder}
+                      value={options.pdfPageRange ?? ''}
+                      onChange={(e) => setOptions((prev) => ({ ...prev, pdfPageRange: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.76rem', color: 'var(--text-muted)', marginBottom: 4 }}>
+                      {dict.targetPicker.pdfRotate}
+                    </label>
+                    <select
+                      className="input-field"
+                      value={options.pdfRotateDegrees ?? 0}
+                      onChange={(e) =>
+                        setOptions((prev) => ({
+                          ...prev,
+                          pdfRotateDegrees: Number(e.target.value) as 0 | 90 | 180 | 270,
+                        }))
+                      }
+                    >
+                      <option value={0}>0°</option>
+                      <option value={90}>90°</option>
+                      <option value={180}>180°</option>
+                      <option value={270}>270°</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Video Resolution Selector */}
+              {isVideoSource && (effectiveTarget === 'mp4' || effectiveTarget === 'mov') && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.76rem', color: 'var(--text-muted)', marginBottom: 6 }}>
+                    {dict.targetPicker.videoResolution}
+                  </label>
+                  <div className="ios-segmented">
+                    {(['1080p', '720p', '480p'] as const).map((res) => (
+                      <button
+                        key={res}
+                        type="button"
+                        className={`ios-segmented-btn${(options.videoResolution ?? '720p') === res ? ' is-active' : ''}`}
+                        onClick={() => setOptions((prev) => ({ ...prev, videoResolution: res }))}
+                      >
+                        {res}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', marginBottom: 6 }}>
                   <span>{dict.targetPicker.quality}</span>
@@ -454,7 +531,7 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
                 />
               </div>
 
-              {allImages && inputs.length > 1 && effectiveTarget === 'pdf' && (
+              {(allImages || allPdfs) && inputs.length > 1 && effectiveTarget === 'pdf' && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                   <span style={{ fontSize: '0.88rem', fontWeight: 500 }}>
                     {dict.targetPicker.mergeIntoSinglePdf}
@@ -503,7 +580,6 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
           )}
         </div>
 
-        {/* Primary Action */}
         <button
           type="button"
           className="btn btn-primary"
@@ -517,7 +593,6 @@ export const TargetPickerSheet: React.FC<TargetPickerSheetProps> = ({
             : dict.targetPicker.startConversion}
         </button>
 
-        {/* Single-Job Cloud Confirmation Dialog */}
         {tempUnlockModalTarget && (
           <div
             className="modal-backdrop"
