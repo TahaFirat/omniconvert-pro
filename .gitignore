@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+services/cloud_worker/node_modules/
+
+# Build outputs
+dist/
+build/
+coverage/
+services/cloud_worker/dist/
+packages/rust_core/target/
+
+# iOS Xcode local build artifacts (keep ios/App project & sources!)
+ios/App/build/
+ios/App/DerivedData/
+ios/App/Pods/
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+*.ipa
+*.xcarchive
+*.dSYM.zip
+*.dSYM
+
+# Secrets & Certificates — NEVER COMMIT!
+*.p8
+*.p12
+*.cer
+*.pem
+*.key
+*.mobileprovision
+exportOptions.plist
+.env
+.env.local
+.env.*.local
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+*.log
+npm-debug.log*
+__pycache__/
+*.pyc
+

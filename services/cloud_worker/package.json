@@ -1,0 +1,23 @@
+{
+  "name": "@omniconvert/cloud-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OmniConvert Pro Tier 3 Ephemeral Zero-Knowledge Cloud Worker API & Isolated Sandbox Runner",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fastify": "^5.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^5.1.1"
+  }
+}

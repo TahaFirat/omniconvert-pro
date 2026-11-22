@@ -1,0 +1,49 @@
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  cloud-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      WORK_DIR: "/work"
+      JOB_TTL_MINUTES: "15"
+      REDIS_URL: "redis://redis:6379"
+    read_only: true
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /work:rw,noexec,nosuid,size=1g
+    depends_on:
+      - redis
+
+  sandbox-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    network_mode: "none"
+    read_only: true
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 2g
+    cpus: 2.0
+    tmpfs:
+      - /work:rw,noexec,nosuid,size=1g
+    command: ["sleep infinity"]

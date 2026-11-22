@@ -1,0 +1,179 @@
+name: iOS App Store Build & Upload
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      auto_submit_review:
+        description: "Automatically attach VALID build and submit for App Review after upload"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      whats_new_tr:
+        description: "Turkish release notes (whatsNew)"
+        required: false
+        default: "Performans iyileştirmeleri ve cihaz içi dönüştürme motoru güncellemeleri."
+        type: string
+      whats_new_en:
+        description: "English release notes (whatsNew)"
+        required: false
+        default: "Performance improvements and on-device conversion engine updates."
+        type: string
+
+concurrency:
+  group: ios-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-upload-ios:
+    name: Build Signed IPA & Upload to App Store Connect
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      APP_BUNDLE_ID: com.omniconvert.app
+      APP_NAME: OmniConvert Pro
+      KEYCHAIN_NAME: build-signing.keychain-db
+      KEYCHAIN_PASSWORD: ci-temp-keychain-${{ github.run_id }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies, build web bundle & sync Capacitor iOS
+        run: |
+          npm ci
+          npm run build
+          npx cap sync ios
+
+      - name: Verify iOS preflight assets (AppIcon RGB non-alpha & PrivacyInfo)
+        run: |
+          python3 -m pip install --upgrade pip pyjwt cryptography requests pillow
+          python3 scripts/store_preflight_audit.py
+
+      - name: Configure CocoaPods signing guard (if Podfile exists)
+        if: hashFiles('ios/App/Podfile') != ''
+        run: |
+          cd ios/App
+          pod install --repo-update
+
+      - name: Setup ephemeral Keychain & import Apple Distribution certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        run: |
+          if [ -z "$BUILD_CERTIFICATE_BASE64" ] || [ -z "$P12_PASSWORD" ]; then
+            echo "Missing BUILD_CERTIFICATE_BASE64 or P12_PASSWORD secret." >&2
+            exit 1
+          fi
+
+          CERT_PATH="$RUNNER_TEMP/distribution_cert.p12"
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_NAME"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          if ! security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_NAME"; then
+            echo "Retrying .p12 import after PKCS12 re-wrap..."
+            openssl pkcs12 -in "$CERT_PATH" -passin "pass:$P12_PASSWORD" -nodes -out "$RUNNER_TEMP/tmp.pem"
+            openssl pkcs12 -export -legacy -in "$RUNNER_TEMP/tmp.pem" -out "$RUNNER_TEMP/legacy.p12" -passout "pass:$P12_PASSWORD"
+            security import "$RUNNER_TEMP/legacy.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_NAME"
+            rm -f "$RUNNER_TEMP/tmp.pem" "$RUNNER_TEMP/legacy.p12"
+          fi
+          security list-keychain -d user -s "$KEYCHAIN_NAME" login.keychain-db
+          security default-keychain -s "$KEYCHAIN_NAME"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          rm -f "$CERT_PATH"
+
+          echo "Imported signing identities:"
+          security find-identity -v -p codesigning "$KEYCHAIN_NAME"
+
+      - name: Fetch/Generate Provisioning Profile & exportOptions.plist via App Store Connect API
+        env:
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          EXPORT_OPTIONS_PLIST: ios/App/exportOptions.plist
+          PATCH_PBXPROJ: ios/App/App.xcodeproj/project.pbxproj
+        run: |
+          python3 scripts/asc_provision.py
+
+      - name: Xcode Clean Archive & Export Signed IPA
+        run: |
+          cd ios/App
+          if [ -d "App.xcworkspace" ]; then
+            BUILD_TARGET="-workspace App.xcworkspace"
+          else
+            BUILD_TARGET="-project App.xcodeproj"
+          fi
+
+          xcodebuild \
+            $BUILD_TARGET \
+            -scheme App \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            clean archive \
+            -archivePath ./build/App.xcarchive
+
+          xcodebuild \
+            -exportArchive \
+            -archivePath ./build/App.xcarchive \
+            -exportPath ./build/export \
+            -exportOptionsPlist ./exportOptions.plist
+
+          IPA_FILE=$(find ./build/export -name "*.ipa" -type f | head -n 1)
+          if [ -z "$IPA_FILE" ]; then
+            echo "Exported .ipa not found under ./build/export" >&2
+            exit 1
+          fi
+          cp "$IPA_FILE" ./build/App.ipa
+          ls -lh ./build/App.ipa
+
+      - name: Upload signed IPA to App Store Connect (xcrun altool)
+        env:
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          printf "%s\n" "$APP_STORE_CONNECT_API_KEY" > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+
+          xcrun altool \
+            --upload-app \
+            --type ios \
+            --file ./ios/App/build/App.ipa \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --verbose
+
+      - name: Auto-attach build & submit for App Store Review (optional workflow_dispatch)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.auto_submit_review == 'true' }}
+        env:
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          python3 scripts/asc_release.py \
+            --bundle-id "$APP_BUNDLE_ID" \
+            --build-number "${{ github.run_number }}" \
+            --whats-new-tr "${{ inputs.whats_new_tr }}" \
+            --whats-new-en "${{ inputs.whats_new_en }}"
+
+      - name: Clean up temporary Keychain, provisioning profile & API keys
+        if: always()
+        run: |
+          security delete-keychain "$KEYCHAIN_NAME" || true
+          rm -rf ~/.appstoreconnect/private_keys || true
+          rm -f ios/App/exportOptions.plist || true

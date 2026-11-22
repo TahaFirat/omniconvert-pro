@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: omniconvert-sandbox-worker
+  labels:
+    app: omniconvert-sandbox-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: omniconvert-sandbox-worker
+  template:
+    metadata:
+      labels:
+        app: omniconvert-sandbox-worker
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sandbox-worker
+          image: ghcr.io/omniconvert/sandbox-worker:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: ephemeral-ramdisk
+              mountPath: /work
+      volumes:
+        - name: ephemeral-ramdisk
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: omniconvert-worker-deny-all-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: omniconvert-sandbox-worker
+  policyTypes:
+    - Egress
+    - Ingress
+  egress: []
+  ingress: []

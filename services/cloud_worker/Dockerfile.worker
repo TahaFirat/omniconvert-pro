@@ -1,0 +1,28 @@
+# Isolated Ephemeral Converter Sandbox Image (Tier 3)
+# Always launched with: --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs /work:rw,noexec,nosuid,size=1g
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libreoffice-nogui \
+    pandoc \
+    calibre \
+    imagemagick \
+    inkscape \
+    ghostscript \
+    poppler-utils \
+    ffmpeg \
+    fontforge-nox \
+    p7zip-full \
+    zstd \
+    cabextract \
+    assimp-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Enforce hardened ImageMagick policy (blocks PDF/PS/EPS/MVG/HTTPS/URL delegates)
+COPY policy.xml /etc/ImageMagick-6/policy.xml
+
+# Non-root UID/GID 65532:65532
+RUN groupadd -g 65532 sandbox && useradd -u 65532 -g 65532 -d /work -s /usr/sbin/nologin sandbox
+WORKDIR /work
+USER 65532:65532
+ENTRYPOINT ["/bin/sh", "-c"]

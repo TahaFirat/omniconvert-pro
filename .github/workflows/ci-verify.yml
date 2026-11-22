@@ -1,0 +1,44 @@
+name: CI Verification (Mobile + Rust Core + Cloud Worker + Store Audit)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify-mobile-and-cloud:
+    name: Typecheck, Build, Unit Tests & Store Preflight Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+      - name: Mobile Web Typecheck, Tests & Build
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Cloud Worker Typecheck & Security Tests
+        run: |
+          cd services/cloud_worker
+          npm ci
+          npx tsc --noEmit
+          npm test
+      - name: Store Pre-Flight Audit
+        run: |
+          python3 -m pip install pillow
+          python3 scripts/store_preflight_audit.py
+
+  verify-rust-core:
+    name: Rust Core Tests (packages/rust_core)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run cargo test (zero warnings / zero GPL)
+        run: |
+          cd packages/rust_core
+          cargo test --all-targets

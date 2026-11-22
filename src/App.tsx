@@ -1,0 +1,96 @@
+import React from 'react';
+import { Star } from 'lucide-react';
+import { AppProvider, useApp } from './application/AppContext';
+import { BottomNav } from './presentation/components/BottomNav';
+import { TopBar } from './presentation/components/TopBar';
+import { ConvertScreen } from './presentation/screens/ConvertScreen';
+import { HistoryPresetsScreen } from './presentation/screens/HistoryPresetsScreen';
+import { PaywallModal } from './presentation/screens/PaywallModal';
+import { QueueScreen } from './presentation/screens/QueueScreen';
+import { SettingsScreen } from './presentation/screens/SettingsScreen';
+
+const AppShell: React.FC = () => {
+  const { activeTab, toastMessage, reviewPromptVisible, dismissReviewPrompt, dict } = useApp();
+
+  return (
+    <div className="app-shell">
+      <TopBar />
+
+      <main className="main-content">
+        {activeTab === 'convert' && <ConvertScreen />}
+        {activeTab === 'queue' && <QueueScreen />}
+        {activeTab === 'history' && <HistoryPresetsScreen />}
+        {activeTab === 'settings' && <SettingsScreen />}
+      </main>
+
+      <BottomNav />
+      <PaywallModal />
+
+      {/* Natural 5-Star In-App Review Prompt ONLY after 3rd successful on-device conversion */}
+      {reviewPromptVisible && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={dict.reviewPrompt.title}>
+          <div className="modal-sheet" style={{ maxWidth: 420 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '1.02rem' }}>
+              <Star size={20} color="#F59E0B" fill="#F59E0B" />
+              <span>{dict.reviewPrompt.title}</span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              {dict.reviewPrompt.body}
+            </p>
+            <div className="grid-2">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => dismissReviewPrompt(false)}
+              >
+                {dict.reviewPrompt.later}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => dismissReviewPrompt(true)}
+              >
+                {dict.reviewPrompt.rateNow}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Non-intrusive Toast */}
+      {toastMessage && (
+        <div
+          role="status"
+          style={{
+            position: 'fixed',
+            bottom: 'calc(84px + var(--safe-bottom))',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 130,
+            maxWidth: 'calc(100vw - 32px)',
+            padding: '9px 16px',
+            borderRadius: 'var(--radius-full)',
+            background: 'var(--bg-surface-secondary)',
+            color: 'var(--text-primary)',
+            border: '0.5px solid var(--separator-strong)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            fontSize: '0.82rem',
+            fontWeight: 500,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.32)',
+          }}
+        >
+          {toastMessage}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const App: React.FC = () => (
+  <AppProvider>
+    <AppShell />
+  </AppProvider>
+);
+
+export default App;
