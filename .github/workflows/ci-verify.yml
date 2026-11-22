@@ -15,22 +15,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: "npm"
       - name: Mobile Web Typecheck, Tests & Build
         run: |
-          npm ci
+          rm -f package-lock.json
+          npm install
           npm test
           npm run build
       - name: Cloud Worker Typecheck & Security Tests
         run: |
           cd services/cloud_worker
-          npm ci
+          rm -f package-lock.json
+          npm install
           npx tsc --noEmit
           npm test
       - name: Store Pre-Flight Audit
         run: |
-          python3 -m pip install pillow
-          python3 scripts/store_preflight_audit.py
+          python3 -m venv "$RUNNER_TEMP/audit-venv"
+          "$RUNNER_TEMP/audit-venv/bin/pip" install pillow
+          "$RUNNER_TEMP/audit-venv/bin/python" scripts/store_preflight_audit.py
 
   verify-rust-core:
     name: Rust Core Tests (packages/rust_core)
