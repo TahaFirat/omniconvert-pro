@@ -306,6 +306,38 @@ def build_slide(headline: str, subline: str, slide_idx: int, lang: str, out_path
     img.save(out_path, format="PNG", optimize=True)
 
 
+def build_ipad_slide(headline: str, subline: str, slide_idx: int, lang: str, out_path: Path) -> None:
+    iw, ih = 2048, 2732
+    img = Image.new("RGB", (iw, ih), (8, 10, 15))
+    draw = ImageDraw.Draw(img)
+
+    for y in range(560):
+        t = y / 560.0
+        r = int(16 * (1 - t) + 8 * t)
+        g = int(26 * (1 - t) + 10 * t)
+        b = int(46 * (1 - t) + 15 * t)
+        draw.line((0, y, iw, y), fill=(r, g, b))
+
+    f_title = load_font(96, bold=True)
+    f_sub = load_font(48, bold=False)
+    tb = draw.textbbox((0, 0), headline, font=f_title)
+    draw.text(((iw - (tb[2] - tb[0])) // 2, 130), headline, font=f_title, fill=(255, 255, 255))
+    sb = draw.textbbox((0, 0), subline, font=f_sub)
+    draw.text(((iw - (sb[2] - sb[0])) // 2, 265), subline, font=f_sub, fill=(162, 168, 180))
+
+    # iPad Pro 13" bezel & centered screen
+    pad_x = 180
+    top_y = 390
+    draw_rounded(draw, (pad_x, top_y, iw - pad_x, ih - 100), 86, fill=(28, 28, 32), outline=(68, 68, 74), width=5)
+    inner = (pad_x + 28, top_y + 28, iw - pad_x - 28, ih - 128)
+    draw_rounded(draw, inner, 64, fill=(0, 0, 0))
+    draw_screen_content(draw, inner, slide_idx, lang)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    assert img.mode == "RGB" and img.size == (iw, ih)
+    img.save(out_path, format="PNG", optimize=True)
+
+
 def main() -> None:
     slides_tr = [
         ("Anında ve Gizli", "Günlük dosyalar tamamen cihazınızda dönüşür", 0),
@@ -322,10 +354,12 @@ def main() -> None:
 
     for idx, (h, s, sid) in enumerate(slides_tr, start=1):
         build_slide(h, s, sid, "tr", OUT_ROOT / "tr" / f"0{idx}_omniconvert_tr.png")
+        build_ipad_slide(h, s, sid, "tr", OUT_ROOT / "ipad_tr" / f"0{idx}_omniconvert_ipad_tr.png")
     for idx, (h, s, sid) in enumerate(slides_en, start=1):
         build_slide(h, s, sid, "en", OUT_ROOT / "en" / f"0{idx}_omniconvert_en.png")
+        build_ipad_slide(h, s, sid, "en", OUT_ROOT / "ipad_en" / f"0{idx}_omniconvert_ipad_en.png")
 
-    print(f"OK Generated 8 App Store Connect screenshots (1290x2796 RGB, alpha=False) in {OUT_ROOT}")
+    print(f"OK Generated iPhone (1290x2796) + iPad 13\" (2048x2732) RGB screenshots in {OUT_ROOT}")
 
 
 if __name__ == "__main__":

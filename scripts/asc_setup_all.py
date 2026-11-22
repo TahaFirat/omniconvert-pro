@@ -190,6 +190,26 @@ def resolve_app_id(token: str, bundle_id: str) -> str:
 
 
 def configure_app_info(token: str, app_id: str, privacy_url: str) -> None:
+    # Declare Content Rights (no third-party copyrighted content)
+    try:
+        asc_req(
+            "PATCH",
+            f"/apps/{app_id}",
+            token,
+            json={
+                "data": {
+                    "type": "apps",
+                    "id": app_id,
+                    "attributes": {
+                        "contentRightsDeclaration": "DOES_NOT_USE_THIRD_PARTY_CONTENT",
+                    },
+                }
+            },
+        )
+        print("[ASC] Set contentRightsDeclaration = DOES_NOT_USE_THIRD_PARTY_CONTENT")
+    except Exception as exc:
+        print(f"[ASC WARN] contentRightsDeclaration skipped: {exc}")
+
     infos = asc_req("GET", f"/apps/{app_id}/appInfos?limit=5", token).get("data", [])
     if not infos:
         return
@@ -438,11 +458,15 @@ def configure_version_and_screenshots(
             loc_id = created_loc["data"]["id"]
             print(f"[ASC] Created version localization ({locale})")
 
-        # Upload screenshots if directory exists
+        # Upload screenshots (iPhone 6.7"/6.9" + iPad Pro 13")
         if screenshots_dir:
-            lang_dir = screenshots_dir / ("tr" if locale == "tr" else "en")
-            if lang_dir.exists():
-                upload_screenshot_set(token, loc_id, lang_dir, "APP_IPHONE_67")
+            lang_key = "tr" if locale == "tr" else "en"
+            iphone_dir = screenshots_dir / lang_key
+            if iphone_dir.exists():
+                upload_screenshot_set(token, loc_id, iphone_dir, "APP_IPHONE_67")
+            ipad_dir = screenshots_dir / f"ipad_{lang_key}"
+            if ipad_dir.exists():
+                upload_screenshot_set(token, loc_id, ipad_dir, "APP_IPAD_PRO_3GEN_129")
 
     # Reviewer notes & contact details
     if contact_email:

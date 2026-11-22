@@ -231,42 +231,54 @@ def update_whats_new(
 
 
 def submit_for_review(token: str, app_id: str, version_id: str) -> str:
-    sub = asc_req(
-        "POST",
-        "/reviewSubmissions",
+    # Reuse an existing READY_FOR_REVIEW draft submission if present
+    existing = asc_req(
+        "GET",
+        f"/reviewSubmissions?filter[app]={app_id}&filter[state]=READY_FOR_REVIEW",
         token,
-        json={
-            "data": {
-                "type": "reviewSubmissions",
-                "attributes": {"platform": "IOS"},
-                "relationships": {
-                    "app": {"data": {"type": "apps", "id": app_id}}
-                },
-            }
-        },
-    )
-    sub_id = sub["data"]["id"]
-    print(f"[ASC] Created reviewSubmission {sub_id} (201)")
+    ).get("data", [])
+    if existing:
+        sub_id = existing[0]["id"]
+        print(f"[ASC] Reusing existing READY_FOR_REVIEW reviewSubmission {sub_id}")
+    else:
+        sub = asc_req(
+            "POST",
+            "/reviewSubmissions",
+            token,
+            json={
+                "data": {
+                    "type": "reviewSubmissions",
+                    "attributes": {"platform": "IOS"},
+                    "relationships": {
+                        "app": {"data": {"type": "apps", "id": app_id}}
+                    },
+                }
+            },
+        )
+        sub_id = sub["data"]["id"]
+        print(f"[ASC] Created reviewSubmission {sub_id} (201)")
 
-    asc_req(
-        "POST",
-        "/reviewSubmissionItems",
-        token,
-        json={
-            "data": {
-                "type": "reviewSubmissionItems",
-                "relationships": {
-                    "reviewSubmission": {
-                        "data": {"type": "reviewSubmissions", "id": sub_id}
+    items = asc_req("GET", f"/reviewSubmissions/{sub_id}/items", token).get("data", [])
+    if not items:
+        asc_req(
+            "POST",
+            "/reviewSubmissionItems",
+            token,
+            json={
+                "data": {
+                    "type": "reviewSubmissionItems",
+                    "relationships": {
+                        "reviewSubmission": {
+                            "data": {"type": "reviewSubmissions", "id": sub_id}
+                        },
+                        "appStoreVersion": {
+                            "data": {"type": "appStoreVersions", "id": version_id}
+                        },
                     },
-                    "appStoreVersion": {
-                        "data": {"type": "appStoreVersions", "id": version_id}
-                    },
-                },
-            }
-        },
-    )
-    print(f"[ASC] Linked version {version_id} to reviewSubmission {sub_id} (201)")
+                }
+            },
+        )
+        print(f"[ASC] Linked version {version_id} to reviewSubmission {sub_id} (201)")
 
     final = asc_req(
         "PATCH",
