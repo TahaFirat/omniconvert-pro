@@ -4,6 +4,7 @@ import {
   ArrowRight,
   ArrowUp,
   ChevronDown,
+  ChevronLeft,
   ChevronUp,
   Eye,
   FilePlus2,
@@ -11,7 +12,7 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
-  X,
+  Trash2,
 } from 'lucide-react';
 import { useApp, type SelectedInputItem } from '../../application/AppContext';
 import { getRemainingDailyProTrials, isProFeatureJob } from '../../application/billingService';
@@ -25,7 +26,7 @@ import {
 import { conversionGraph } from '../../domain/graph/conversionGraph';
 import { getGuidedTool, type GuidedToolId } from '../../domain/tools/toolCatalog';
 import { FilePreviewModal, type PreviewTarget } from '../components/FilePreviewModal';
-import { formatFileSize } from '../components/formatBytes';
+import { formatFileSize, middleTruncate } from '../components/formatBytes';
 import { IosSwitch } from '../components/IosSwitch';
 import { PrivacyBadge } from '../components/PrivacyBadge';
 import { WarningCard } from '../components/WarningCard';
@@ -81,7 +82,6 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
   const [previewItem, setPreviewItem] = useState<PreviewTarget | null>(null);
   const [inlineMediaUrl, setInlineMediaUrl] = useState<string | null>(null);
 
-  // Auto-enable merge when 2+ PDFs or 2+ images are loaded and target is PDF
   const allMergeable =
     selectedInputs.length > 1 &&
     selectedInputs.every((i) => MERGEABLE_FORMATS.has(i.inspection.detectedFormatId));
@@ -92,7 +92,6 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
     }
   }, [toolId]);
 
-  // Inline video/audio preview URL for media files
   const primaryIsVideo = Boolean(
     primary &&
       (primary.file.type.startsWith('video/') ||
@@ -201,7 +200,10 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
   const isMergeTool = toolId === 'pdf-merge';
   const needsMoreForMerge = isMergeTool && selectedInputs.length < 2;
   const totalBytes = selectedInputs.reduce((s, x) => s + x.file.size, 0);
-  const totalPdfPages = selectedInputs.reduce((s, x) => s + (x.pageCount ?? (x.inspection.detectedFormatId === 'pdf' ? 0 : 1)), 0);
+  const totalPdfPages = selectedInputs.reduce(
+    (s, x) => s + (x.pageCount ?? (x.inspection.detectedFormatId === 'pdf' ? 0 : 1)),
+    0,
+  );
 
   const isHardBlocked =
     selectedInputs.length === 0 ||
@@ -234,21 +236,21 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
   };
 
   const showFullFormatBrowser = toolId === 'universal' || toolId === 'doc-data';
-  const showQuickPills = Boolean(
-    toolSpec && toolSpec.quickTargets.length > 1 && primary,
-  );
+  const showQuickPills = Boolean(toolSpec && toolSpec.quickTargets.length > 1 && primary);
   const showPdfSplitRotate =
     (toolId === 'pdf-tools' || primary?.inspection.detectedFormatId === 'pdf') &&
     effectiveTarget === 'pdf' &&
     !isMergeTool &&
     selectedInputs.length === 1;
   const showImageQuality =
-    (toolId === 'image-convert' || toolId === 'images-to-pdf') &&
-    selectedInputs.length > 0;
+    (toolId === 'image-convert' || toolId === 'images-to-pdf') && selectedInputs.length > 0;
   const showVideoResolution =
     (primaryIsVideo || toolId === 'video-compress') &&
     (effectiveTarget === 'mp4' || effectiveTarget === 'mov');
-  const showOcrLang = toolId === 'ocr-extract' || (effectiveTarget === 'txt' && (primary?.inspection.detectedFormatId === 'pdf' || primary?.file.type.startsWith('image/')));
+  const showOcrLang =
+    toolId === 'ocr-extract' ||
+    (effectiveTarget === 'txt' &&
+      (primary?.inspection.detectedFormatId === 'pdf' || primary?.file.type.startsWith('image/')));
 
   const activeUsesPro = activePlan
     ? isProFeatureJob(activePlan, options, selectedInputs.length)
@@ -273,808 +275,832 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
 
   return (
     <div
-      className="modal-backdrop"
+      className="fullscreen-view"
       role="dialog"
       aria-modal="true"
       aria-label={toolCopy?.title ?? dict.targetPicker.title}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
     >
-      <div className="modal-sheet">
-        <div className="sheet-grabber" />
+      <input
+        ref={fileInputRef}
+        data-testid="workspace-file-input"
+        type="file"
+        accept={toolSpec?.accept}
+        multiple={toolSpec ? toolSpec.multiple : true}
+        style={{ display: 'none' }}
+        onChange={(e) => void handleFileChange(e)}
+      />
 
-        <input
-          ref={fileInputRef}
-          data-testid="workspace-file-input"
-          type="file"
-          accept={toolSpec?.accept}
-          multiple={toolSpec ? toolSpec.multiple : true}
-          style={{ display: 'none' }}
-          onChange={(e) => void handleFileChange(e)}
-        />
+      {/* 1. Sticky Native iOS Top Nav Bar (< Back | Title | + Add) */}
+      <header className="fullscreen-header">
+        <div className="fullscreen-header-inner">
+          <button
+            type="button"
+            className="nav-back-btn"
+            onClick={onClose}
+            aria-label={dict.paywall.close}
+            data-testid="workspace-back-btn"
+          >
+            <ChevronLeft size={22} strokeWidth={2.3} />
+            <span>{dict.paywall.close}</span>
+          </button>
 
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <h2 style={{ margin: 0, fontSize: '1.18rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
-              {toolCopy?.title ?? dict.targetPicker.title}
-            </h2>
-            <p style={{ margin: '3px 0 0 0', fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.38 }}>
-              {toolCopy?.subtitle ??
-                (primary
-                  ? selectedInputs.length === 1
-                    ? primary.file.name
-                    : `${selectedInputs.length} ${dict.convert.selectedFiles.toLowerCase()}`
-                  : dict.convert.dropSubtitle)}
-            </p>
-          </div>
+          <h2
+            className="truncate"
+            style={{
+              margin: 0,
+              fontSize: '1.05rem',
+              fontWeight: 700,
+              textAlign: 'center',
+              flex: 1,
+              color: 'var(--text-primary)',
+            }}
+          >
+            {toolCopy?.title ?? dict.targetPicker.title}
+          </h2>
+
           <button
             type="button"
             className="icon-btn"
-            onClick={onClose}
-            aria-label={dict.paywall.close}
+            data-testid="workspace-add-more-btn"
+            onClick={() => fileInputRef.current?.click()}
+            aria-label={dict.convert.addMore}
+            style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
           >
-            <X size={17} />
+            <Plus size={20} strokeWidth={2.2} />
           </button>
         </div>
+      </header>
 
-        {/* Empty State Picker inside Guided Tool */}
-        {selectedInputs.length === 0 ? (
-          <button
-            type="button"
-            data-testid="workspace-pick-btn"
-            onClick={() => fileInputRef.current?.click()}
-            className="card"
-            style={{
-              width: '100%',
-              padding: '28px 18px',
-              background: 'var(--sheet-card)',
-              border: '1.5px dashed var(--separator-strong)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 10,
-              textAlign: 'center',
-            }}
-          >
-            <div
+      {/* 2. SINGLE Smooth Full-Screen Scroll Stage (Zero Nested Scroll Traps, Zero Overlap!) */}
+      <div className="fullscreen-body">
+        <div className="fullscreen-body-inner">
+          {/* Concise Tool Guidance Banner */}
+          {toolCopy && (
+            <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+              {toolCopy.subtitle}
+            </p>
+          )}
+
+          {/* Empty State Drop Card */}
+          {selectedInputs.length === 0 ? (
+            <button
+              type="button"
+              data-testid="workspace-pick-btn"
+              onClick={() => fileInputRef.current?.click()}
+              className="card"
               style={{
-                width: 48,
-                height: 48,
-                borderRadius: '50%',
-                background: toolSpec?.accentBg ?? 'var(--accent-soft)',
-                color: toolSpec?.accentColor ?? 'var(--accent)',
+                width: '100%',
+                padding: '36px 20px',
+                border: '1.5px dashed var(--separator-strong)',
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
-                justifyContent: 'center',
+                gap: 12,
+                textAlign: 'center',
               }}
             >
-              <FilePlus2 size={22} />
-            </div>
-            <div style={{ fontWeight: 600, fontSize: '0.96rem', color: 'var(--text-primary)' }}>
-              {toolCopy?.pickCta ?? dict.convert.dropTitle}
-            </div>
-            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-              {isMergeTool ? dict.tools.pdfMerge.needTwo : dict.convert.dropSubtitle}
-            </div>
-          </button>
-        ) : (
-          /* Selected Files with Live Thumbnails, Page Counts, Preview, & Up/Down Reorder */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <span style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                {dict.convert.selectedFiles} ({selectedInputs.length}) • {formatFileSize(totalBytes)}
-                {allMergeable && totalPdfPages > 0 ? ` • ${interpolate(dict.convert.pagesLabel, { count: totalPdfPages })}` : ''}
-              </span>
-              <button
-                type="button"
-                data-testid="workspace-add-more-btn"
-                onClick={() => fileInputRef.current?.click()}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  color: 'var(--accent)',
-                  fontSize: '0.82rem',
-                  fontWeight: 600,
-                  padding: '2px 4px',
-                }}
-              >
-                <Plus size={15} />
-                <span>{dict.convert.addMore.replace(/^\+\s*/, '')}</span>
-              </button>
-            </div>
-
-            {selectedInputs.length > 1 && (
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                {dict.convert.reorderHint}
-              </div>
-            )}
-
-            <div className="ios-group" style={{ background: 'var(--sheet-card)', maxHeight: 220, overflowY: 'auto' }}>
-              {selectedInputs.map((item, idx) => (
-                <div key={item.id} className="ios-row" style={{ padding: '10px 12px', gap: 10 }}>
-                  {selectedInputs.length > 1 && (
-                    <span
-                      style={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: '50%',
-                        background: 'var(--accent-soft)',
-                        color: 'var(--accent)',
-                        fontSize: '0.72rem',
-                        fontWeight: 700,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {idx + 1}
-                    </span>
-                  )}
-
-                  {item.thumbUrl ? (
-                    <img
-                      src={item.thumbUrl}
-                      alt={item.file.name}
-                      style={{
-                        width: 38,
-                        height: 38,
-                        borderRadius: 8,
-                        objectFit: 'cover',
-                        flexShrink: 0,
-                        border: '0.5px solid var(--separator)',
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: 38,
-                        height: 38,
-                        borderRadius: 9,
-                        background: 'var(--bg-fill)',
-                        color: 'var(--text-primary)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 700,
-                        fontSize: '0.68rem',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {item.inspection.detectedFormatId.toUpperCase().slice(0, 4)}
-                    </div>
-                  )}
-
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="truncate" style={{ fontWeight: 500, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
-                      {item.file.name}
-                    </div>
-                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 1 }}>
-                      {formatFileSize(item.file.size)}
-                      {item.pageCount ? ` • ${interpolate(dict.convert.pagesLabel, { count: item.pageCount })}` : ''}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      aria-label={dict.queue.preview}
-                      onClick={() => openInputPreview(item)}
-                      style={{ width: 30, height: 30, minWidth: 30, minHeight: 30 }}
-                    >
-                      <Eye size={14} />
-                    </button>
-                    {selectedInputs.length > 1 && (
-                      <>
-                        <button
-                          type="button"
-                          className="icon-btn"
-                          aria-label="Move up"
-                          disabled={idx === 0}
-                          onClick={() => moveSelectedInput(item.id, 'up')}
-                          style={{ width: 28, height: 28, minWidth: 28, minHeight: 28 }}
-                        >
-                          <ArrowUp size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-btn"
-                          aria-label="Move down"
-                          disabled={idx === selectedInputs.length - 1}
-                          onClick={() => moveSelectedInput(item.id, 'down')}
-                          style={{ width: 28, height: 28, minWidth: 28, minHeight: 28 }}
-                        >
-                          <ArrowDown size={13} />
-                        </button>
-                      </>
-                    )}
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      aria-label="Remove"
-                      onClick={() => removeSelectedInput(item.id)}
-                      style={{ width: 28, height: 28, minWidth: 28, minHeight: 28 }}
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {needsMoreForMerge && (
               <div
-                role="status"
                 style={{
-                  padding: '10px 12px',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--orange-soft)',
-                  color: 'var(--orange-text)',
-                  fontSize: '0.82rem',
-                  fontWeight: 500,
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  background: toolSpec?.accentBg ?? 'var(--accent-soft)',
+                  color: toolSpec?.accentColor ?? 'var(--accent)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                {dict.tools.pdfMerge.needTwo}
+                <FilePlus2 size={26} />
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Inline Media Player for Video/Audio (Media Converter style!) */}
-        {inlineMediaUrl && primaryIsVideo && (
-          <video
-            controls
-            playsInline
-            preload="metadata"
-            src={inlineMediaUrl}
-            style={{ width: '100%', maxHeight: 190, borderRadius: 12, background: '#000000' }}
-          />
-        )}
-        {inlineMediaUrl && primaryIsAudio && (
-          <audio controls src={inlineMediaUrl} style={{ width: '100%' }} />
-        )}
-
-        {/* Extension mismatch warning */}
-        {primary?.inspection.isExtensionMismatch && (
-          <div
-            role="status"
-            style={{
-              padding: '9px 12px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--orange-soft)',
-              color: 'var(--orange-text)',
-              fontSize: '0.8rem',
-              fontWeight: 500,
-            }}
-          >
-            {interpolate(dict.convert.extensionMismatch, {
-              claimed: primary.inspection.claimedExtension,
-              detected: primary.inspection.detectedFormatId,
-            })}
-          </div>
-        )}
-
-        {/* Quick Target Format Pills for Guided Tools */}
-        {showQuickPills && toolSpec && (
-          <div>
-            <div className="section-header" style={{ paddingLeft: 2 }}>
-              {dict.targetPicker.title}
-            </div>
-            <div className="grid-3">
-              {toolSpec.quickTargets.map((fmtId) => {
-                const selected = effectiveTarget === fmtId;
-                return (
-                  <button
-                    key={fmtId}
-                    type="button"
-                    data-testid={`target-option-${fmtId}`}
-                    onClick={() => handleSelectTarget(fmtId)}
-                    style={{
-                      padding: '11px 10px',
-                      borderRadius: 'var(--radius-md)',
-                      border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--separator)'}`,
-                      background: selected ? 'var(--accent-soft)' : 'var(--sheet-card)',
-                      color: selected ? 'var(--accent)' : 'var(--text-primary)',
-                      fontWeight: 700,
-                      fontSize: '0.9rem',
-                      textAlign: 'center',
-                    }}
-                  >
-                    {fmtId === 'm4r' ? 'M4R (Zil)' : fmtId.toUpperCase()}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Full Format Picker for Universal / Document & Data Converter */}
-        {showFullFormatBrowser && primary && (
-          <>
-            <div style={{ position: 'relative' }}>
-              <Search
-                size={16}
+              <div style={{ fontWeight: 700, fontSize: '1.04rem', color: 'var(--text-primary)' }}>
+                {toolCopy?.pickCta ?? dict.convert.dropTitle}
+              </div>
+              <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', maxWidth: 320, lineHeight: 1.4 }}>
+                {isMergeTool ? dict.tools.pdfMerge.needTwo : dict.convert.dropSubtitle}
+              </div>
+            </button>
+          ) : (
+            /* Spacious Selected File Cards (Apple HIG 3-Zone Row + Dedicated Action Strip) */
+            <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div
                 style={{
-                  position: 'absolute',
-                  left: 12,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'var(--text-muted)',
-                  pointerEvents: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  padding: '0 4px',
                 }}
-              />
-              <input
-                type="search"
-                className="input-field"
-                style={{ paddingLeft: 36 }}
-                placeholder={dict.targetPicker.searchPlaceholder}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                aria-label={dict.targetPicker.searchPlaceholder}
-              />
-            </div>
+              >
+                <span className="section-header tabular" style={{ margin: 0, padding: 0 }}>
+                  {dict.convert.selectedFiles} ({selectedInputs.length}) · {formatFileSize(totalBytes)}
+                  {allMergeable && totalPdfPages > 0
+                    ? ` · ${interpolate(dict.convert.pagesLabel, { count: totalPdfPages })}`
+                    : ''}
+                </span>
+              </div>
 
-            {recommended.length > 0 && !query.trim() && (
-              <div>
-                <div className="section-header" style={{ paddingLeft: 2 }}>
-                  {dict.targetPicker.recommended}
-                </div>
-                <div className="grid-3">
-                  {recommended.map(({ format, plan }) => {
-                    const selected = format.id === effectiveTarget;
-                    const locked = plan.blockedByOfflineLock && !allowTempCloud;
-                    const needsPro = isProFeatureJob(plan, options, selectedInputs.length);
-                    return (
-                      <button
-                        key={format.id}
-                        type="button"
-                        data-testid={`target-option-${format.id}`}
-                        onClick={() => handleSelectTarget(format.id, plan.blockedByOfflineLock)}
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'flex-start',
-                          gap: 4,
-                          padding: '10px 11px',
-                          borderRadius: 'var(--radius-md)',
-                          border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--separator)'}`,
-                          background: selected ? 'var(--accent-soft)' : 'var(--sheet-card)',
-                          color: 'var(--text-primary)',
-                          opacity: locked ? 0.65 : 1,
-                          textAlign: 'left',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                            {format.id.toUpperCase()}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {selectedInputs.map((item, idx) => (
+                  <div key={item.id} className="file-item-card">
+                    <div className="file-item-main">
+                      {/* Leading Thumbnail / Format Badge with Order Chip */}
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        {item.thumbUrl ? (
+                          <img
+                            src={item.thumbUrl}
+                            alt={item.file.name}
+                            style={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: 11,
+                              objectFit: 'cover',
+                              display: 'block',
+                              border: '0.5px solid var(--separator)',
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: 11,
+                              background: 'var(--bg-fill)',
+                              color: 'var(--text-primary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 700,
+                              fontSize: '0.75rem',
+                            }}
+                          >
+                            {item.inspection.detectedFormatId.toUpperCase().slice(0, 4)}
+                          </div>
+                        )}
+                        {selectedInputs.length > 1 && (
+                          <span
+                            className="tabular"
+                            style={{
+                              position: 'absolute',
+                              top: -6,
+                              left: -6,
+                              width: 22,
+                              height: 22,
+                              borderRadius: '50%',
+                              background: 'var(--accent)',
+                              color: '#FFFFFF',
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                            }}
+                          >
+                            {idx + 1}
                           </span>
-                          {locked && <Lock size={12} color="var(--text-muted)" />}
-                        </div>
-                        <span
+                        )}
+                      </div>
+
+                      {/* Center Text Stack — Full Readable Middle-Truncated Filename */}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div
                           style={{
-                            fontSize: '0.72rem',
                             fontWeight: 600,
-                            color: needsPro && !entitlements.isPro ? 'var(--accent)' : 'var(--green-text)',
+                            fontSize: '0.96rem',
+                            color: 'var(--text-primary)',
+                            lineHeight: 1.3,
+                            wordBreak: 'break-word',
                           }}
                         >
-                          {needsPro && !entitlements.isPro ? dict.badges.proTag : dict.badges.localShort}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+                          {middleTruncate(item.file.name, 34)}
+                        </div>
+                        <div className="tabular" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 3 }}>
+                          {item.inspection.detectedFormatId.toUpperCase()} · {formatFileSize(item.file.size)}
+                          {item.pageCount
+                            ? ` · ${interpolate(dict.convert.pagesLabel, { count: item.pageCount })}`
+                            : ''}
+                        </div>
+                      </div>
+                    </div>
 
-            <div>
-              <div className="section-header" style={{ paddingLeft: 2 }}>
-                {dict.targetPicker.allMatching}
+                    {/* Clean Spacious Action Strip — Zero Tiny Crammed Buttons! */}
+                    <div
+                      className={`file-item-actions${
+                        selectedInputs.length === 1 ? ' file-item-actions--two' : ''
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        className="file-action-pill"
+                        onClick={() => openInputPreview(item)}
+                      >
+                        <Eye size={15} />
+                        <span>{dict.queue.preview}</span>
+                      </button>
+
+                      {selectedInputs.length > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            className="file-action-pill"
+                            disabled={idx === 0}
+                            onClick={() => moveSelectedInput(item.id, 'up')}
+                            aria-label="Move up"
+                          >
+                            <ArrowUp size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            className="file-action-pill"
+                            disabled={idx === selectedInputs.length - 1}
+                            onClick={() => moveSelectedInput(item.id, 'down')}
+                            aria-label="Move down"
+                          >
+                            <ArrowDown size={15} />
+                          </button>
+                        </>
+                      )}
+
+                      <button
+                        type="button"
+                        className="file-action-pill file-action-pill--danger"
+                        onClick={() => removeSelectedInput(item.id)}
+                        aria-label={dict.history.deletePreset}
+                      >
+                        <Trash2 size={15} />
+                        {selectedInputs.length === 1 && <span>{dict.history.deletePreset}</span>}
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-              {filteredTargets.length === 0 ? (
-                <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', padding: '8px 2px' }}>
-                  {dict.targetPicker.noResults}
-                </div>
-              ) : (
+
+              {needsMoreForMerge && (
                 <div
+                  role="status"
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))',
-                    gap: 8,
-                    maxHeight: 150,
-                    overflowY: 'auto',
+                    padding: '12px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--orange-soft)',
+                    color: 'var(--orange-text)',
+                    fontSize: '0.84rem',
+                    fontWeight: 500,
+                    lineHeight: 1.4,
                   }}
                 >
-                  {filteredTargets.map(({ format, plan }) => {
-                    const selected = format.id === effectiveTarget;
-                    const locked = plan.blockedByOfflineLock && !allowTempCloud;
-                    const needsPro = isProFeatureJob(plan, options, selectedInputs.length);
-                    return (
-                      <button
-                        key={format.id}
-                        type="button"
-                        data-testid={`target-all-${format.id}`}
-                        onClick={() => handleSelectTarget(format.id, plan.blockedByOfflineLock)}
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'flex-start',
-                          gap: 3,
-                          padding: '9px 10px',
-                          borderRadius: 'var(--radius-sm)',
-                          border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--separator)'}`,
-                          background: selected ? 'var(--accent-soft)' : 'var(--sheet-card)',
-                          color: 'var(--text-primary)',
-                          opacity: locked ? 0.65 : 1,
-                          textAlign: 'left',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--text-primary)' }}>
-                            {format.id.toUpperCase()}
-                          </span>
-                          {locked && <Lock size={11} color="var(--text-muted)" />}
-                        </div>
-                        <span
-                          style={{
-                            fontSize: '0.68rem',
-                            color: needsPro && !entitlements.isPro ? 'var(--accent)' : 'var(--text-muted)',
-                          }}
-                        >
-                          {needsPro && !entitlements.isPro ? dict.badges.proTag : dict.badges.localShort}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  {dict.tools.pdfMerge.needTwo}
                 </div>
               )}
-            </div>
-          </>
-        )}
 
-        {/* Visible Contextual Options (Never Hidden!) */}
-        {showPdfSplitRotate && (
-          <div className="card" style={{ background: 'var(--sheet-card)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                {dict.targetPicker.pdfPageRange}
-                {primary?.pageCount ? ` (${interpolate(dict.convert.pagesLabel, { count: primary.pageCount })})` : ''}
-              </label>
-              <input
-                type="text"
-                className="input-field"
-                placeholder={dict.targetPicker.pdfPageRangePlaceholder}
-                value={options.pdfPageRange ?? ''}
-                onChange={(e) => setOptions((prev) => ({ ...prev, pdfPageRange: e.target.value }))}
-              />
-            </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ width: '100%' }}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Plus size={18} />
+                <span>{toolCopy?.pickCta ?? dict.convert.addMore}</span>
+              </button>
+            </section>
+          )}
 
-            <div>
-              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                {dict.targetPicker.pdfRotate}
+          {/* Inline Media Player for Video/Audio */}
+          {inlineMediaUrl && primaryIsVideo && (
+            <video
+              controls
+              playsInline
+              preload="metadata"
+              src={inlineMediaUrl}
+              style={{ width: '100%', maxHeight: 220, borderRadius: 14, background: '#000000' }}
+            />
+          )}
+          {inlineMediaUrl && primaryIsAudio && (
+            <div className="card">
+              <audio controls src={inlineMediaUrl} style={{ width: '100%' }} />
+            </div>
+          )}
+
+          {/* Extension mismatch warning */}
+          {primary?.inspection.isExtensionMismatch && (
+            <div
+              role="status"
+              style={{
+                padding: '11px 14px',
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--orange-soft)',
+                color: 'var(--orange-text)',
+                fontSize: '0.84rem',
+                fontWeight: 500,
+              }}
+            >
+              {interpolate(dict.convert.extensionMismatch, {
+                claimed: primary.inspection.claimedExtension,
+                detected: primary.inspection.detectedFormatId,
+              })}
+            </div>
+          )}
+
+          {/* Quick Format Selector Pills for Guided Tools */}
+          {showQuickPills && toolSpec && (
+            <section>
+              <div className="section-header">{dict.targetPicker.title}</div>
+              <div className="grid-3">
+                {toolSpec.quickTargets.map((fmtId) => {
+                  const selected = effectiveTarget === fmtId;
+                  return (
+                    <button
+                      key={fmtId}
+                      type="button"
+                      data-testid={`target-option-${fmtId}`}
+                      onClick={() => handleSelectTarget(fmtId)}
+                      style={{
+                        minHeight: 48,
+                        padding: '10px 12px',
+                        borderRadius: 'var(--radius-md)',
+                        border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--separator)'}`,
+                        background: selected ? 'var(--accent-soft)' : 'var(--bg-surface)',
+                        color: selected ? 'var(--accent)' : 'var(--text-primary)',
+                        fontWeight: 700,
+                        fontSize: '0.92rem',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {fmtId === 'm4r' ? 'M4R (Zil)' : fmtId.toUpperCase()}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* Full Format Browser for Universal / Document & Data Converter (NO nested scroll trap!) */}
+          {showFullFormatBrowser && primary && (
+            <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ position: 'relative' }}>
+                <Search
+                  size={17}
+                  style={{
+                    position: 'absolute',
+                    left: 14,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-muted)',
+                    pointerEvents: 'none',
+                  }}
+                />
+                <input
+                  type="search"
+                  className="input-field"
+                  style={{ paddingLeft: 40 }}
+                  placeholder={dict.targetPicker.searchPlaceholder}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  aria-label={dict.targetPicker.searchPlaceholder}
+                />
+              </div>
+
+              {recommended.length > 0 && !query.trim() && (
+                <div>
+                  <div className="section-header">{dict.targetPicker.recommended}</div>
+                  <div className="grid-3">
+                    {recommended.map(({ format, plan }) => {
+                      const selected = format.id === effectiveTarget;
+                      const locked = plan.blockedByOfflineLock && !allowTempCloud;
+                      const needsPro = isProFeatureJob(plan, options, selectedInputs.length);
+                      return (
+                        <button
+                          key={format.id}
+                          type="button"
+                          data-testid={`target-option-${format.id}`}
+                          onClick={() => handleSelectTarget(format.id, plan.blockedByOfflineLock)}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-start',
+                            justifyContent: 'center',
+                            gap: 4,
+                            minHeight: 60,
+                            padding: '10px 12px',
+                            borderRadius: 'var(--radius-md)',
+                            border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--separator)'}`,
+                            background: selected ? 'var(--accent-soft)' : 'var(--bg-surface)',
+                            color: 'var(--text-primary)',
+                            opacity: locked ? 0.65 : 1,
+                            textAlign: 'left',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.94rem', color: 'var(--text-primary)' }}>
+                              {format.id.toUpperCase()}
+                            </span>
+                            {locked && <Lock size={13} color="var(--text-muted)" />}
+                          </div>
+                          <span
+                            style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              color: needsPro && !entitlements.isPro ? 'var(--accent)' : 'var(--green-text)',
+                            }}
+                          >
+                            {needsPro && !entitlements.isPro ? dict.badges.proTag : dict.badges.localShort}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <div className="section-header">{dict.targetPicker.allMatching}</div>
+                {filteredTargets.length === 0 ? (
+                  <div style={{ fontSize: '0.88rem', color: 'var(--text-muted)', padding: '8px 4px' }}>
+                    {dict.targetPicker.noResults}
+                  </div>
+                ) : (
+                  <div className="grid-3">
+                    {filteredTargets.map(({ format, plan }) => {
+                      const selected = format.id === effectiveTarget;
+                      const locked = plan.blockedByOfflineLock && !allowTempCloud;
+                      const needsPro = isProFeatureJob(plan, options, selectedInputs.length);
+                      return (
+                        <button
+                          key={format.id}
+                          type="button"
+                          data-testid={`target-all-${format.id}`}
+                          onClick={() => handleSelectTarget(format.id, plan.blockedByOfflineLock)}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-start',
+                            justifyContent: 'center',
+                            gap: 3,
+                            minHeight: 56,
+                            padding: '10px 12px',
+                            borderRadius: 'var(--radius-md)',
+                            border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--separator)'}`,
+                            background: selected ? 'var(--accent-soft)' : 'var(--bg-surface)',
+                            color: 'var(--text-primary)',
+                            opacity: locked ? 0.65 : 1,
+                            textAlign: 'left',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                              {format.id.toUpperCase()}
+                            </span>
+                            {locked && <Lock size={12} color="var(--text-muted)" />}
+                          </div>
+                          <span
+                            style={{
+                              fontSize: '0.7rem',
+                              color: needsPro && !entitlements.isPro ? 'var(--accent)' : 'var(--text-muted)',
+                            }}
+                          >
+                            {needsPro && !entitlements.isPro ? dict.badges.proTag : dict.badges.localShort}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Contextual Visible Options */}
+          {showPdfSplitRotate && (
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  {dict.targetPicker.pdfPageRange}
+                  {primary?.pageCount
+                    ? ` (${interpolate(dict.convert.pagesLabel, { count: primary.pageCount })})`
+                    : ''}
+                </label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder={dict.targetPicker.pdfPageRangePlaceholder}
+                  value={options.pdfPageRange ?? ''}
+                  onChange={(e) => setOptions((prev) => ({ ...prev, pdfPageRange: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  {dict.targetPicker.pdfRotate}
+                </div>
+                <div className="ios-segmented">
+                  {([0, 90, 180, 270] as const).map((deg) => (
+                    <button
+                      key={deg}
+                      type="button"
+                      className={`ios-segmented-btn${(options.pdfRotateDegrees ?? 0) === deg ? ' is-active' : ''}`}
+                      onClick={() => setOptions((prev) => ({ ...prev, pdfRotateDegrees: deg }))}
+                    >
+                      {deg}°
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showImageQuality && (
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.86rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                  <span>{dict.targetPicker.quality}</span>
+                  <span className="tabular">{options.quality}%</span>
+                </div>
+                <div className="ios-segmented">
+                  {(
+                    [
+                      [68, 1280, dict.targetPicker.qualitySmall],
+                      [85, undefined, dict.targetPicker.qualityBalanced],
+                      [96, undefined, dict.targetPicker.qualityHigh],
+                    ] as const
+                  ).map(([q, maxDim, label]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      className={`ios-segmented-btn${options.quality === q ? ' is-active' : ''}`}
+                      onClick={() => setOptions((prev) => ({ ...prev, quality: q, maxDimension: maxDim }))}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {dict.targetPicker.stripExif}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                    {dict.targetPicker.stripExifDesc}
+                  </div>
+                </div>
+                <IosSwitch
+                  checked={options.stripExif}
+                  onChange={(v) => setOptions((prev) => ({ ...prev, stripExif: v }))}
+                  ariaLabel={dict.targetPicker.stripExif}
+                />
+              </div>
+            </div>
+          )}
+
+          {showVideoResolution && (
+            <div className="card">
+              <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                {dict.targetPicker.videoResolution}
               </div>
               <div className="ios-segmented">
-                {([0, 90, 180, 270] as const).map((deg) => (
+                {(['480p', '720p', '1080p'] as const).map((res) => (
                   <button
-                    key={deg}
+                    key={res}
                     type="button"
-                    className={`ios-segmented-btn${(options.pdfRotateDegrees ?? 0) === deg ? ' is-active' : ''}`}
-                    onClick={() => setOptions((prev) => ({ ...prev, pdfRotateDegrees: deg }))}
+                    className={`ios-segmented-btn${(options.videoResolution ?? '720p') === res ? ' is-active' : ''}`}
+                    onClick={() => setOptions((prev) => ({ ...prev, videoResolution: res }))}
                   >
-                    {deg}°
+                    {res}
                   </button>
                 ))}
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {showImageQuality && (
-          <div className="card" style={{ background: 'var(--sheet-card)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                <span>{dict.targetPicker.quality}</span>
-                <span>{options.quality}%</span>
+          {showOcrLang && (
+            <div className="card">
+              <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                {dict.targetPicker.ocrLanguage}
               </div>
               <div className="ios-segmented">
                 {(
                   [
-                    [68, 1280, dict.targetPicker.qualitySmall],
-                    [85, undefined, dict.targetPicker.qualityBalanced],
-                    [96, undefined, dict.targetPicker.qualityHigh],
+                    ['tr', 'Türkçe'],
+                    ['en', 'English'],
+                    ['de', 'Deutsch'],
+                    ['es', 'Español'],
                   ] as const
-                ).map(([q, maxDim, label]) => (
+                ).map(([code, label]) => (
                   <button
-                    key={label}
+                    key={code}
                     type="button"
-                    className={`ios-segmented-btn${options.quality === q ? ' is-active' : ''}`}
-                    onClick={() =>
-                      setOptions((prev) => ({ ...prev, quality: q, maxDimension: maxDim }))
-                    }
+                    className={`ios-segmented-btn${options.ocrLanguage === code ? ' is-active' : ''}`}
+                    onClick={() => setOptions((prev) => ({ ...prev, ocrLanguage: code }))}
                   >
                     {label}
                   </button>
                 ))}
               </div>
             </div>
+          )}
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '0.86rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-                  {dict.targetPicker.stripExif}
-                </div>
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                  {dict.targetPicker.stripExifDesc}
-                </div>
-              </div>
+          {!isMergeTool && toolId !== 'images-to-pdf' && allMergeable && effectiveTarget === 'pdf' && (
+            <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                {dict.targetPicker.mergeIntoSinglePdf}
+              </span>
               <IosSwitch
-                checked={options.stripExif}
-                onChange={(v) => setOptions((prev) => ({ ...prev, stripExif: v }))}
-                ariaLabel={dict.targetPicker.stripExif}
+                checked={Boolean(options.mergeIntoSinglePdf)}
+                onChange={(v) => setOptions((prev) => ({ ...prev, mergeIntoSinglePdf: v }))}
+                ariaLabel={dict.targetPicker.mergeIntoSinglePdf}
               />
             </div>
-          </div>
-        )}
+          )}
 
-        {showVideoResolution && (
-          <div className="card" style={{ background: 'var(--sheet-card)' }}>
-            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-              {dict.targetPicker.videoResolution}
-            </div>
-            <div className="ios-segmented">
-              {(['480p', '720p', '1080p'] as const).map((res) => (
-                <button
-                  key={res}
-                  type="button"
-                  className={`ios-segmented-btn${(options.videoResolution ?? '720p') === res ? ' is-active' : ''}`}
-                  onClick={() => setOptions((prev) => ({ ...prev, videoResolution: res }))}
-                >
-                  {res}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {showOcrLang && (
-          <div className="card" style={{ background: 'var(--sheet-card)' }}>
-            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-              {dict.targetPicker.ocrLanguage}
-            </div>
-            <div className="ios-segmented">
-              {(
-                [
-                  ['tr', 'Türkçe'],
-                  ['en', 'English'],
-                  ['de', 'Deutsch'],
-                  ['es', 'Español'],
-                ] as const
-              ).map(([code, label]) => (
-                <button
-                  key={code}
-                  type="button"
-                  className={`ios-segmented-btn${options.ocrLanguage === code ? ' is-active' : ''}`}
-                  onClick={() => setOptions((prev) => ({ ...prev, ocrLanguage: code }))}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Prominent Merge Switch when 2+ PDFs/Images loaded in universal mode */}
-        {!isMergeTool && toolId !== 'images-to-pdf' && allMergeable && effectiveTarget === 'pdf' && (
-          <div
-            className="card"
-            style={{
-              background: 'var(--sheet-card)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-            }}
-          >
-            <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {dict.targetPicker.mergeIntoSinglePdf}
-            </span>
-            <IosSwitch
-              checked={Boolean(options.mergeIntoSinglePdf)}
-              onChange={(v) => setOptions((prev) => ({ ...prev, mergeIntoSinglePdf: v }))}
-              ariaLabel={dict.targetPicker.mergeIntoSinglePdf}
-            />
-          </div>
-        )}
-
-        {/* Route Summary + Privacy Pill */}
-        {activePlan && primary && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 8,
-              padding: '10px 12px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--sheet-card)',
-              border: '0.5px solid var(--separator)',
-              flexWrap: 'wrap',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              <span>{activePlan.sourceFormat.toUpperCase()}</span>
-              {activePlan.steps.map((step, idx) => (
-                <React.Fragment key={`${step.source}-${step.target}-${idx}`}>
-                  <ArrowRight size={13} color="var(--text-muted)" />
-                  <span>{step.target.toUpperCase()}</span>
-                </React.Fragment>
-              ))}
-            </div>
-            <PrivacyBadge tier={activePlan.highestTier} compact />
-          </div>
-        )}
-
-        {/* Calm Free Daily Pro Trial Info */}
-        {activeUsesPro && !entitlements.isPro && selectedInputs.length > 0 && (
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0 2px' }}>
-            {interpolate(dict.targetPicker.proTrialHint, { count: remainingTrials })}
-          </div>
-        )}
-
-        {activePlan && activePlan.warnings.length > 0 && (
-          <WarningCard codes={activePlan.warnings} />
-        )}
-
-        {primary?.inspection.isEncrypted && (
-          <div>
-            <label
-              htmlFor="omni-file-password"
-              style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}
+          {/* Route Summary */}
+          {activePlan && primary && (
+            <div
+              className="card"
+              style={{
+                padding: '12px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                flexWrap: 'wrap',
+              }}
             >
-              {dict.targetPicker.pdfPassword}
-            </label>
-            <input
-              id="omni-file-password"
-              type="password"
-              className="input-field"
-              placeholder={dict.targetPicker.pdfPasswordPlaceholder}
-              value={options.password ?? ''}
-              onChange={(e) => setOptions((prev) => ({ ...prev, password: e.target.value }))}
-            />
-          </div>
-        )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.86rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                <span>{activePlan.sourceFormat.toUpperCase()}</span>
+                {activePlan.steps.map((step, idx) => (
+                  <React.Fragment key={`${step.source}-${step.target}-${idx}`}>
+                    <ArrowRight size={14} color="var(--text-muted)" />
+                    <span>{step.target.toUpperCase()}</span>
+                  </React.Fragment>
+                ))}
+              </div>
+              <PrivacyBadge tier={activePlan.highestTier} compact />
+            </div>
+          )}
 
-        {/* Optional Fine-Tune Disclosure */}
-        {selectedInputs.length > 0 && (
-          <div className="ios-group" style={{ background: 'var(--sheet-card)' }}>
-            <button
-              type="button"
-              className="ios-row ios-row-interactive"
-              onClick={() => setAdvancedOpen((v) => !v)}
-            >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 500, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
-                <SlidersHorizontal size={16} color="var(--accent)" />
-                {dict.targetPicker.advancedSettings}
-              </span>
-              {advancedOpen ? (
-                <ChevronUp size={16} color="var(--text-muted)" />
-              ) : (
-                <ChevronDown size={16} color="var(--text-muted)" />
-              )}
-            </button>
+          {activePlan && activePlan.warnings.length > 0 && <WarningCard codes={activePlan.warnings} />}
 
-            {advancedOpen && (
-              <div
-                style={{
-                  padding: '12px 15px 15px 15px',
-                  borderTop: '0.5px solid var(--separator)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 12,
-                }}
+          {primary?.inspection.isEncrypted && (
+            <div className="card">
+              <label
+                htmlFor="omni-file-password"
+                style={{ display: 'block', fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}
               >
-                <div className="grid-2">
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.76rem', color: 'var(--text-muted)', marginBottom: 4 }}>
-                      {dict.targetPicker.maxDimension}
-                    </label>
-                    <input
-                      type="number"
-                      min={128}
-                      max={8192}
-                      placeholder="Otomatik"
-                      className="input-field"
-                      value={options.maxDimension ?? ''}
-                      onChange={(e) =>
-                        setOptions((prev) => ({
-                          ...prev,
-                          maxDimension: e.target.value ? Number(e.target.value) : undefined,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.76rem', color: 'var(--text-muted)', marginBottom: 4 }}>
-                      {dict.targetPicker.dpi}
-                    </label>
-                    <select
-                      className="input-field"
-                      value={options.dpi ?? 150}
-                      onChange={(e) => setOptions((prev) => ({ ...prev, dpi: Number(e.target.value) }))}
-                    >
-                      <option value={72}>72</option>
-                      <option value={150}>150</option>
-                      <option value={300}>300</option>
-                    </select>
-                  </div>
-                </div>
+                {dict.targetPicker.pdfPassword}
+              </label>
+              <input
+                id="omni-file-password"
+                type="password"
+                className="input-field"
+                placeholder={dict.targetPicker.pdfPasswordPlaceholder}
+                value={options.password ?? ''}
+                onChange={(e) => setOptions((prev) => ({ ...prev, password: e.target.value }))}
+              />
+            </div>
+          )}
 
-                {showPresetSave ? (
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input
-                      type="text"
-                      className="input-field"
-                      placeholder={dict.history.presetNamePrompt}
-                      value={presetNameInput}
-                      onChange={(e) => setPresetNameInput(e.target.value)}
-                    />
+          {/* Fine-Tune Options Disclosure */}
+          {selectedInputs.length > 0 && (
+            <div className="ios-group">
+              <button
+                type="button"
+                className="ios-row ios-row-interactive"
+                onClick={() => setAdvancedOpen((v) => !v)}
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontWeight: 500, fontSize: '0.92rem', color: 'var(--text-primary)' }}>
+                  <SlidersHorizontal size={17} color="var(--accent)" />
+                  {dict.targetPicker.advancedSettings}
+                </span>
+                {advancedOpen ? (
+                  <ChevronUp size={18} color="var(--text-muted)" />
+                ) : (
+                  <ChevronDown size={18} color="var(--text-muted)" />
+                )}
+              </button>
+
+              {advancedOpen && (
+                <div
+                  style={{
+                    padding: '14px 16px 16px 16px',
+                    borderTop: '0.5px solid var(--separator)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 14,
+                  }}
+                >
+                  <div className="grid-2">
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 6 }}>
+                        {dict.targetPicker.maxDimension}
+                      </label>
+                      <input
+                        type="number"
+                        min={128}
+                        max={8192}
+                        placeholder="Otomatik"
+                        className="input-field"
+                        value={options.maxDimension ?? ''}
+                        onChange={(e) =>
+                          setOptions((prev) => ({
+                            ...prev,
+                            maxDimension: e.target.value ? Number(e.target.value) : undefined,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 6 }}>
+                        {dict.targetPicker.dpi}
+                      </label>
+                      <select
+                        className="input-field"
+                        value={options.dpi ?? 150}
+                        onChange={(e) => setOptions((prev) => ({ ...prev, dpi: Number(e.target.value) }))}
+                      >
+                        <option value={72}>72</option>
+                        <option value={150}>150</option>
+                        <option value={300}>300</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {showPresetSave ? (
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <input
+                        type="text"
+                        className="input-field"
+                        placeholder={dict.history.presetNamePrompt}
+                        value={presetNameInput}
+                        onChange={(e) => setPresetNameInput(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={!presetNameInput.trim() || !effectiveTarget}
+                        onClick={() => {
+                          saveCustomPreset(presetNameInput, effectiveTarget, options);
+                          setPresetNameInput('');
+                          setShowPresetSave(false);
+                        }}
+                      >
+                        {dict.queue.save}
+                      </button>
+                    </div>
+                  ) : (
                     <button
                       type="button"
-                      className="btn btn-primary"
-                      disabled={!presetNameInput.trim() || !effectiveTarget}
-                      onClick={() => {
-                        saveCustomPreset(presetNameInput, effectiveTarget, options);
-                        setPresetNameInput('');
-                        setShowPresetSave(false);
-                      }}
+                      className="btn btn-secondary"
+                      style={{ width: '100%' }}
+                      onClick={() => setShowPresetSave(true)}
                     >
-                      {dict.queue.save}
+                      {dict.targetPicker.saveAsPreset}
                     </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ width: '100%' }}
-                    onClick={() => setShowPresetSave(true)}
-                  >
-                    {dict.targetPicker.saveAsPreset}
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
-        {/* Primary Action CTA */}
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={isHardBlocked}
-          data-testid="start-conversion-btn"
-          onClick={() => void handleStart()}
-          style={{ width: '100%' }}
-        >
-          {ctaLabel}
-        </button>
-
-        {/* Temp Cloud Unlock Confirmation */}
-        {tempUnlockModalTarget && (
-          <div
-            className="modal-backdrop"
-            style={{ zIndex: 120 }}
-            role="alertdialog"
-            aria-modal="true"
-            aria-label={dict.offlineLock.tempAllowTitle}
+      {/* 3. Sticky Pinned Bottom Action Bar — NEVER Overlaps, ALWAYS Clickable! */}
+      <footer className="fullscreen-footer">
+        <div className="fullscreen-footer-inner">
+          {activeUsesPro && !entitlements.isPro && selectedInputs.length > 0 && (
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+              {interpolate(dict.targetPicker.proTrialHint, { count: remainingTrials })}
+            </div>
+          )}
+          <button
+            type="button"
+            className="btn btn-primary btn-lg"
+            disabled={isHardBlocked}
+            data-testid="start-conversion-btn"
+            onClick={() => void handleStart()}
+            style={{ width: '100%' }}
           >
-            <div className="modal-sheet" style={{ maxWidth: 380 }}>
-              <div style={{ fontWeight: 700, fontSize: '1.02rem' }}>
-                {dict.offlineLock.tempAllowTitle}
-              </div>
-              <p style={{ margin: 0, fontSize: '0.86rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+            {ctaLabel}
+          </button>
+        </div>
+      </footer>
+
+      {/* Temp Cloud Unlock Confirmation */}
+      {tempUnlockModalTarget && (
+        <div
+          className="modal-backdrop"
+          style={{ zIndex: 130 }}
+          role="alertdialog"
+          aria-modal="true"
+          aria-label={dict.offlineLock.tempAllowTitle}
+        >
+          <div className="modal-sheet" style={{ maxWidth: 400 }}>
+            <div className="modal-sheet-header">
+              <div className="sheet-grabber" />
+              <div style={{ fontWeight: 700, fontSize: '1.05rem' }}>{dict.offlineLock.tempAllowTitle}</div>
+            </div>
+            <div className="modal-sheet-body">
+              <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: 1.48 }}>
                 {dict.offlineLock.tempAllowBody}
               </p>
               <div className="grid-2">
@@ -1100,11 +1126,11 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Live Input File Preview Modal */}
-        <FilePreviewModal target={previewItem} onClose={() => setPreviewItem(null)} />
-      </div>
+      {/* Full-Screen Input File Preview */}
+      <FilePreviewModal target={previewItem} onClose={() => setPreviewItem(null)} />
     </div>
   );
 };

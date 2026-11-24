@@ -125,25 +125,20 @@ export const HistoryPresetsScreen: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <button
                     type="button"
-                    className="btn btn-ghost"
-                    style={{ minHeight: 32, padding: '4px 8px', fontSize: '0.82rem' }}
+                    className="btn btn-secondary"
+                    style={{ minHeight: 40, padding: '6px 12px', fontSize: '0.82rem' }}
                     onClick={() => launchCustomPreset(p)}
                   >
                     {dict.history.applyPreset}
                   </button>
                   <button
                     type="button"
+                    className="icon-btn"
                     aria-label={dict.history.deletePreset}
                     onClick={() => deleteCustomPreset(p.id)}
-                    style={{
-                      border: 'none',
-                      background: 'transparent',
-                      color: 'var(--red-text)',
-                      padding: 4,
-                      display: 'inline-flex',
-                    }}
+                    style={{ background: 'var(--red-soft)', color: 'var(--red-text)' }}
                   >
-                    <Trash2 size={15} />
+                    <Trash2 size={16} />
                   </button>
                 </div>
               </div>
@@ -167,7 +162,7 @@ export const HistoryPresetsScreen: React.FC = () => {
             {dict.history.recentJobs}
           </h2>
           {history.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <button
                 type="button"
                 onClick={() => {
@@ -175,12 +170,11 @@ export const HistoryPresetsScreen: React.FC = () => {
                   setSelectedIds(new Set());
                 }}
                 style={{
-                  border: 'none',
-                  background: 'transparent',
+                  minHeight: 38,
+                  padding: '6px 8px',
                   color: 'var(--accent)',
-                  fontSize: '0.8rem',
-                  fontWeight: 500,
-                  padding: 0,
+                  fontSize: '0.84rem',
+                  fontWeight: 600,
                 }}
               >
                 {selecting ? dict.history.doneSelect : dict.history.selectMode}
@@ -190,12 +184,11 @@ export const HistoryPresetsScreen: React.FC = () => {
                   type="button"
                   onClick={clearHistory}
                   style={{
-                    border: 'none',
-                    background: 'transparent',
+                    minHeight: 38,
+                    padding: '6px 8px',
                     color: 'var(--text-muted)',
-                    fontSize: '0.8rem',
+                    fontSize: '0.84rem',
                     fontWeight: 500,
-                    padding: 0,
                   }}
                 >
                   {dict.history.clearAll}

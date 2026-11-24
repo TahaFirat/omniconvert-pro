@@ -39,54 +39,59 @@ const AppShell: React.FC = () => {
       {reviewPromptVisible && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={dict.reviewPrompt.title}>
           <div className="modal-sheet" style={{ maxWidth: 420 }}>
-            <div className="sheet-grabber" />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: '1.05rem' }}>
-              <Star size={20} color="#F59E0B" fill="#F59E0B" />
-              <span>{dict.reviewPrompt.title}</span>
+            <div className="modal-sheet-header">
+              <div className="sheet-grabber" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: '1.08rem' }}>
+                <Star size={20} color="#F59E0B" fill="#F59E0B" />
+                <span>{dict.reviewPrompt.title}</span>
+              </div>
             </div>
-            <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              {dict.reviewPrompt.body}
-            </p>
-            <div className="grid-2">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => dismissReviewPrompt(false)}
-              >
-                {dict.reviewPrompt.later}
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => dismissReviewPrompt(true)}
-              >
-                {dict.reviewPrompt.rateNow}
-              </button>
+            <div className="modal-sheet-body">
+              <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                {dict.reviewPrompt.body}
+              </p>
+              <div className="grid-2">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => dismissReviewPrompt(false)}
+                >
+                  {dict.reviewPrompt.later}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => dismissReviewPrompt(true)}
+                >
+                  {dict.reviewPrompt.rateNow}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Non-intrusive Floating Toast */}
+      {/* Non-intrusive Top Toast — never blocks bottom buttons or tab bar */}
       {toastMessage && (
         <div
           role="status"
           style={{
             position: 'fixed',
-            bottom: 'calc(84px + var(--safe-bottom))',
+            top: 'calc(var(--safe-top) + 68px)',
             left: '50%',
             transform: 'translateX(-50%)',
-            zIndex: 130,
+            zIndex: 140,
+            pointerEvents: 'none',
             maxWidth: 'calc(100vw - 32px)',
-            padding: '10px 16px',
+            padding: '10px 18px',
             borderRadius: 'var(--radius-full)',
             background: 'var(--bg-surface-secondary)',
             color: 'var(--text-primary)',
             border: '0.5px solid var(--separator-strong)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
-            fontSize: '0.84rem',
-            fontWeight: 500,
+            fontSize: '0.86rem',
+            fontWeight: 600,
             boxShadow: '0 8px 24px rgba(0,0,0,0.34)',
             textAlign: 'center',
           }}

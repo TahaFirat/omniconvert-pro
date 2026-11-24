@@ -1,4 +1,4 @@
-/* OmniConvert — Native iOS 27 Liquid Glass + Capacitor Viewport-Locked Design System */
+/* OmniConvert — Apple HIG 8pt-Grid + iOS 27 Liquid Glass + Zero-Overlap Design System */
 
 :root {
   color-scheme: light;
@@ -20,7 +20,7 @@
   /* Apple System Palette — High-Contrast Light */
   --bg-app: #F2F2F7;
   --bg-surface: #FFFFFF;
-  --bg-surface-secondary: #E8E8ED;
+  --bg-surface-secondary: #E8E8EE;
   --bg-fill: rgba(118, 118, 128, 0.13);
   --bg-fill-strong: rgba(118, 118, 128, 0.22);
 
@@ -28,20 +28,20 @@
   --separator-strong: rgba(60, 60, 67, 0.24);
 
   --text-primary: #09090B;
-  --text-secondary: #2C2C30;
-  --text-muted: #58585E;
+  --text-secondary: #2C2C32;
+  --text-muted: #57575F;
 
   --accent: #007AFF;
   --accent-soft: rgba(0, 122, 255, 0.12);
-  --green: #30B755;
-  --green-soft: rgba(48, 183, 85, 0.14);
-  --green-text: #146C2E;
+  --green: #28B44B;
+  --green-soft: rgba(40, 180, 75, 0.14);
+  --green-text: #12692A;
   --indigo: #5856D6;
   --indigo-soft: rgba(88, 86, 214, 0.13);
-  --indigo-text: #403EA8;
+  --indigo-text: #3E3CA3;
   --orange: #F57C00;
   --orange-soft: rgba(245, 124, 0, 0.14);
-  --orange-text: #A54B00;
+  --orange-text: #A04800;
   --red: #E53935;
   --red-soft: rgba(229, 57, 53, 0.13);
   --red-text: #B71C1C;
@@ -52,28 +52,29 @@
   --purple: #7B1FA2;
   --purple-soft: rgba(123, 31, 162, 0.12);
 
-  /* Translucent Top Header */
-  --header-glass: rgba(242, 242, 247, 0.86);
+  --header-glass: rgba(242, 242, 247, 0.88);
+  --footer-glass: rgba(255, 255, 255, 0.92);
 
   /* iOS 27 Floating Liquid Glass Tab Bar — Light */
   --liquid-bar-bg: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.72) 0%,
-    rgba(246, 246, 250, 0.56) 100%
+    rgba(255, 255, 255, 0.78) 0%,
+    rgba(246, 246, 250, 0.64) 100%
   );
-  --liquid-bar-border: rgba(255, 255, 255, 0.85);
+  --liquid-bar-border: rgba(255, 255, 255, 0.88);
   --liquid-bar-shadow:
     0 12px 32px rgba(0, 0, 0, 0.12),
     0 2px 8px rgba(0, 0, 0, 0.06),
-    inset 0 1px 1px rgba(255, 255, 255, 0.95),
+    inset 0 1px 1px rgba(255, 255, 255, 0.96),
     inset 0 -0.5px 0.5px rgba(0, 0, 0, 0.06);
-  --liquid-pill-bg: rgba(255, 255, 255, 0.86);
+  --liquid-pill-bg: rgba(255, 255, 255, 0.92);
   --liquid-pill-shadow:
     0 2px 10px rgba(0, 0, 0, 0.08),
     inset 0 1px 0.5px rgba(255, 255, 255, 1);
 
   --sheet-bg: #F2F2F7;
   --sheet-card: #FFFFFF;
+  --preview-canvas-bg: #E5E5EA;
 }
 
 [data-theme='dark'],
@@ -81,17 +82,17 @@
   color-scheme: dark;
 
   --bg-app: #09090B;
-  --bg-surface: #18181B;
-  --bg-surface-secondary: #242429;
+  --bg-surface: #18181C;
+  --bg-surface-secondary: #24242A;
   --bg-fill: rgba(255, 255, 255, 0.09);
   --bg-fill-strong: rgba(255, 255, 255, 0.16);
 
-  --separator: rgba(255, 255, 255, 0.09);
-  --separator-strong: rgba(255, 255, 255, 0.17);
+  --separator: rgba(255, 255, 255, 0.1);
+  --separator-strong: rgba(255, 255, 255, 0.18);
 
   --text-primary: #FAFAFA;
-  --text-secondary: #D4D4D8;
-  --text-muted: #A1A1AA;
+  --text-secondary: #D4D4DC;
+  --text-muted: #A1A1AC;
 
   --accent: #0A84FF;
   --accent-soft: rgba(10, 132, 255, 0.18);
@@ -100,7 +101,7 @@
   --green-text: #5CE07E;
   --indigo: #7C7AFF;
   --indigo-soft: rgba(124, 122, 255, 0.18);
-  --indigo-text: #A8A6FF;
+  --indigo-text: #AAA8FF;
   --orange: #FF9F0A;
   --orange-soft: rgba(255, 159, 10, 0.18);
   --orange-text: #FFC266;
@@ -114,15 +115,16 @@
   --purple: #BF5AF2;
   --purple-soft: rgba(191, 90, 242, 0.18);
 
-  --header-glass: rgba(9, 9, 11, 0.84);
+  --header-glass: rgba(9, 9, 11, 0.86);
+  --footer-glass: rgba(18, 18, 22, 0.94);
 
   /* iOS 27 Floating Liquid Glass Tab Bar — Dark */
   --liquid-bar-bg: linear-gradient(
     180deg,
-    rgba(38, 38, 44, 0.52) 0%,
-    rgba(20, 20, 24, 0.44) 100%
+    rgba(38, 38, 46, 0.58) 0%,
+    rgba(20, 20, 26, 0.48) 100%
   );
-  --liquid-bar-border: rgba(255, 255, 255, 0.17);
+  --liquid-bar-border: rgba(255, 255, 255, 0.18);
   --liquid-bar-shadow:
     0 14px 36px rgba(0, 0, 0, 0.56),
     0 2px 10px rgba(0, 0, 0, 0.34),
@@ -130,22 +132,25 @@
     inset 0 -0.5px 0.5px rgba(0, 0, 0, 0.12);
   --liquid-pill-bg: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.16) 0%,
+    rgba(255, 255, 255, 0.17) 0%,
     rgba(255, 255, 255, 0.08) 100%
   );
   --liquid-pill-shadow:
     0 2px 10px rgba(0, 0, 0, 0.25),
     inset 0 0.75px 0.5px rgba(255, 255, 255, 0.26);
 
-  --sheet-bg: #111114;
-  --sheet-card: #1C1C20;
+  --sheet-bg: #111115;
+  --sheet-card: #1C1C22;
+  --preview-canvas-bg: #0D0D10;
 }
 
 [data-theme='amoled'] {
   --bg-app: #000000;
-  --bg-surface: #121215;
-  --bg-surface-secondary: #1D1D22;
-  --header-glass: rgba(0, 0, 0, 0.86);
+  --bg-surface: #121216;
+  --bg-surface-secondary: #1E1E24;
+  --header-glass: rgba(0, 0, 0, 0.88);
+  --footer-glass: rgba(10, 10, 12, 0.96);
+  --preview-canvas-bg: #000000;
 }
 
 *,
@@ -208,6 +213,10 @@ textarea {
   outline-offset: 2px;
 }
 
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Locked Native App Shell */
 .app-shell {
   position: relative;
@@ -240,16 +249,17 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
+  min-height: 44px;
 }
 
 .nav-large-title {
   margin: 0;
-  font-size: 1.48rem;
+  font-size: 1.55rem;
   font-weight: 700;
   letter-spacing: -0.03em;
-  line-height: 1.18;
+  line-height: 1.2;
   color: var(--text-primary);
   min-width: 0;
 }
@@ -270,10 +280,101 @@ textarea {
   width: 100%;
   max-width: 720px;
   margin: 0 auto;
-  padding: 14px max(16px, var(--safe-right)) calc(112px + var(--safe-bottom)) max(16px, var(--safe-left));
+  padding: 16px max(16px, var(--safe-right)) calc(120px + var(--safe-bottom)) max(16px, var(--safe-left));
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
+}
+
+/* ZERO-SQUISH INVARIANT: direct children of vertical flex scroll stacks NEVER shrink or overlap */
+.main-content > *,
+.fullscreen-body-inner > *,
+.modal-sheet-body > *,
+.ios-group > * {
+  flex-shrink: 0;
+}
+
+/* ============================================================================
+   FULL-SCREEN NATIVE iOS VIEW ARCHITECTURE (Tools & Full-Screen Preview)
+   Sticky Header + Single Clean Scroll Stage + Sticky Bottom CTA — ZERO OVERLAP
+   ============================================================================ */
+.fullscreen-view {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-app);
+  color: var(--text-primary);
+}
+
+.fullscreen-view--preview {
+  z-index: 120;
+  background: var(--preview-canvas-bg);
+}
+
+.fullscreen-header {
+  flex-shrink: 0;
+  z-index: 10;
+  padding-top: calc(var(--safe-top) + 8px);
+  padding-bottom: 8px;
+  padding-left: max(12px, var(--safe-left));
+  padding-right: max(12px, var(--safe-right));
+  background: var(--header-glass);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.fullscreen-header-inner {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+}
+
+.fullscreen-body {
+  flex: 1 1 0%;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+.fullscreen-body-inner {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px max(16px, var(--safe-right)) 28px max(16px, var(--safe-left));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fullscreen-footer {
+  flex-shrink: 0;
+  z-index: 10;
+  padding: 12px max(16px, var(--safe-right)) calc(14px + var(--safe-bottom)) max(16px, var(--safe-left));
+  background: var(--footer-glass);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-top: 0.5px solid var(--separator);
+}
+
+.fullscreen-footer-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* ============================================================================
@@ -295,7 +396,7 @@ textarea {
   pointer-events: auto;
   position: relative;
   width: 100%;
-  max-width: 404px;
+  max-width: 408px;
   padding: 5px;
   border-radius: 34px;
   background: var(--liquid-bar-bg);
@@ -305,7 +406,7 @@ textarea {
   box-shadow: var(--liquid-bar-shadow);
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 2px;
+  gap: 4px;
   overflow: hidden;
 }
 
@@ -331,20 +432,20 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  min-height: 52px;
+  min-height: 54px;
   padding: 6px 4px;
   border: none;
   border-radius: 28px;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   font-weight: 500;
   letter-spacing: -0.01em;
   transition: color 0.18s ease, background 0.22s ease, transform 0.15s ease, box-shadow 0.22s ease;
 }
 
 .liquid-tab-btn:active {
-  transform: scale(0.94);
+  transform: scale(0.95);
 }
 
 .liquid-tab-btn.is-active {
@@ -357,23 +458,23 @@ textarea {
 .liquid-tab-badge {
   position: absolute;
   top: 5px;
-  right: calc(50% - 19px);
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
+  right: calc(50% - 20px);
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
   border-radius: var(--radius-full);
   background: var(--accent);
   color: #FFFFFF;
-  font-size: 0.64rem;
+  font-size: 0.65rem;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-/* iOS Inset Grouped Lists & Surfaces */
+/* iOS Inset Grouped Lists & Cards */
 .section-header {
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -388,6 +489,8 @@ textarea {
   border: 0.5px solid var(--separator);
   overflow: hidden;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .ios-row {
@@ -396,11 +499,11 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 13px 15px;
+  padding: 13px 16px;
   background: transparent;
   border: none;
   text-align: left;
-  min-height: 52px;
+  min-height: 54px;
   position: relative;
   text-decoration: none;
   color: var(--text-primary);
@@ -415,7 +518,7 @@ textarea {
   content: '';
   position: absolute;
   top: 0;
-  left: 15px;
+  left: 16px;
   right: 0;
   height: 0.5px;
   background: var(--separator);
@@ -425,9 +528,72 @@ textarea {
   background: var(--bg-surface);
   border-radius: var(--radius-lg);
   border: 0.5px solid var(--separator);
-  padding: 15px;
+  padding: 16px;
   min-width: 0;
   color: var(--text-primary);
+}
+
+/* Spacious File Item Card (Apple HIG 3-Zone Row + Dedicated Action Strip) */
+.file-item-card {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  border: 0.5px solid var(--separator);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.file-item-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.file-item-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--separator);
+}
+
+.file-item-actions--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.file-action-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 40px;
+  padding: 6px 8px;
+  border-radius: 11px;
+  background: var(--bg-fill);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-action-pill:active:not(:disabled) {
+  background: var(--bg-fill-strong);
+  transform: scale(0.97);
+}
+
+.file-action-pill:disabled {
+  opacity: 0.34;
+  cursor: not-allowed;
+}
+
+.file-action-pill--danger {
+  background: var(--red-soft);
+  color: var(--red-text);
 }
 
 /* Horizontal Pill Strip */
@@ -446,13 +612,13 @@ textarea {
 
 .filter-pill {
   flex-shrink: 0;
-  padding: 8px 14px;
-  min-height: 36px;
+  padding: 9px 15px;
+  min-height: 40px;
   border-radius: var(--radius-full);
   background: var(--bg-surface);
   border: 0.5px solid var(--separator);
   color: var(--text-secondary);
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   font-weight: 600;
   white-space: nowrap;
   transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
@@ -464,17 +630,17 @@ textarea {
   color: #FFFFFF;
 }
 
-/* Tool Card Grid — 2 Columns on Mobile, 3 on Tablet */
+/* Spacious Tool Card Grid — 2 Columns on Mobile, 3 on Tablet (iLovePDF 8pt Rhythm) */
 .tools-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
-@media (min-width: 600px) {
+@media (min-width: 620px) {
   .tools-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: 14px;
   }
 }
 
@@ -482,8 +648,9 @@ textarea {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
-  padding: 14px;
+  gap: 12px;
+  padding: 16px;
+  min-height: 136px;
   border-radius: var(--radius-lg);
   background: var(--bg-surface);
   border: 0.5px solid var(--separator);
@@ -499,8 +666,8 @@ textarea {
 }
 
 .tool-icon-box {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -560,17 +727,17 @@ textarea {
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   padding: 3px;
-  border-radius: 11px;
+  border-radius: 12px;
   background: var(--bg-fill);
-  gap: 2px;
+  gap: 3px;
 }
 
 .ios-segmented-btn {
   border: none;
-  border-radius: 8px;
-  padding: 7px 6px;
-  min-height: 34px;
-  font-size: 0.8rem;
+  border-radius: 9px;
+  padding: 8px 6px;
+  min-height: 38px;
+  font-size: 0.82rem;
   font-weight: 500;
   background: transparent;
   color: var(--text-secondary);
@@ -587,28 +754,34 @@ textarea {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
 }
 
-/* Buttons */
+/* Buttons — Apple HIG 48–52px Primary Touch Targets */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 8px;
   border-radius: var(--radius-md);
   font-weight: 600;
-  font-size: 0.92rem;
+  font-size: 0.96rem;
   line-height: 1.2;
-  padding: 12px 16px;
+  padding: 12px 18px;
   border: none;
   transition: transform 0.12s ease, opacity 0.15s ease, background-color 0.15s ease;
-  min-height: 46px;
+  min-height: 48px;
   max-width: 100%;
   text-decoration: none;
   color: var(--text-primary);
 }
 
+.btn-lg {
+  min-height: 52px;
+  font-size: 1rem;
+  border-radius: 15px;
+}
+
 .btn:active:not(:disabled) {
   transform: scale(0.98);
-  opacity: 0.86;
+  opacity: 0.88;
 }
 
 .btn:disabled {
@@ -636,11 +809,12 @@ textarea {
   color: var(--red-text);
 }
 
+/* 44x44pt Apple HIG Icon Tap Target */
 .icon-btn {
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  min-height: 34px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: 50%;
   background: var(--bg-fill);
   color: var(--text-primary);
@@ -652,23 +826,41 @@ textarea {
 }
 
 .icon-btn:active:not(:disabled) {
-  transform: scale(0.92);
+  transform: scale(0.93);
   background: var(--bg-fill-strong);
 }
 
 .icon-btn:disabled {
-  opacity: 0.32;
+  opacity: 0.34;
   cursor: not-allowed;
+}
+
+.nav-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 6px 10px 6px 4px;
+  border-radius: 12px;
+  color: var(--accent);
+  font-size: 0.96rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.nav-back-btn:active {
+  background: var(--accent-soft);
 }
 
 /* Status Tags */
 .tag {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
+  gap: 5px;
+  padding: 4px 10px;
   border-radius: var(--radius-full);
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -709,7 +901,8 @@ textarea {
 .input-field {
   width: 100%;
   min-width: 0;
-  padding: 10px 13px;
+  min-height: 44px;
+  padding: 10px 14px;
   border-radius: 12px;
   border: 0.5px solid var(--separator);
   background: var(--bg-fill);
@@ -725,7 +918,7 @@ textarea {
 /* Progress Track */
 .progress-track {
   width: 100%;
-  height: 5px;
+  height: 6px;
   border-radius: var(--radius-full);
   background: var(--bg-fill);
   overflow: hidden;
@@ -738,7 +931,7 @@ textarea {
   transition: width 0.2s ease;
 }
 
-/* iOS Sheet Modal — Internal Scroll, Safe Area Compliant */
+/* iOS Sheet Modal (Strictly for Paywall / Licenses / Confirm Dialogs — Structured Header + Scrollable Body!) */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -749,31 +942,48 @@ textarea {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: calc(var(--safe-top) + 12px) 0 0 0;
+  padding: calc(var(--safe-top) + 16px) 0 0 0;
 }
 
 @media (min-width: 640px) {
   .modal-backdrop {
     align-items: center;
-    padding: 20px;
+    padding: 24px;
   }
 }
 
 .modal-sheet {
   width: 100%;
-  max-width: 580px;
+  max-width: 560px;
   max-height: calc(100% - 8px);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--sheet-bg);
   color: var(--text-primary);
   border-top: 0.5px solid var(--separator-strong);
   border-radius: 26px 26px 0 0;
-  padding: 10px 16px calc(24px + var(--safe-bottom)) 16px;
+}
+
+.modal-sheet-header {
+  flex-shrink: 0;
+  padding: 10px 18px 12px 18px;
+  border-bottom: 0.5px solid var(--separator);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
+}
+
+.modal-sheet-body {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  padding: 16px 18px calc(24px + var(--safe-bottom)) 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .sheet-grabber {
@@ -781,7 +991,7 @@ textarea {
   height: 5px;
   border-radius: var(--radius-full);
   background: var(--separator-strong);
-  margin: 0 auto 2px auto;
+  margin: 0 auto;
   flex-shrink: 0;
 }
 
@@ -789,7 +999,9 @@ textarea {
   .modal-sheet {
     border: 0.5px solid var(--separator-strong);
     border-radius: 24px;
-    padding: 20px 22px;
+  }
+  .modal-sheet-body {
+    padding: 18px 22px 24px 22px;
   }
   .sheet-grabber {
     display: none;
@@ -799,13 +1011,13 @@ textarea {
 .grid-2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .grid-3 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 @media (max-width: 374px) {
@@ -817,10 +1029,10 @@ textarea {
 /* Transparency checkerboard for image/PNG/SVG preview */
 .preview-checkerboard {
   background-image:
-    linear-gradient(45deg, rgba(128, 128, 128, 0.14) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(128, 128, 128, 0.14) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(128, 128, 128, 0.14) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(128, 128, 128, 0.14) 75%);
+    linear-gradient(45deg, rgba(128, 128, 128, 0.16) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(128, 128, 128, 0.16) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(128, 128, 128, 0.16) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(128, 128, 128, 0.16) 75%);
   background-size: 16px 16px;
   background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }

@@ -7,7 +7,9 @@ import {
   Download,
   FileArchive,
   Maximize2,
+  Moon,
   Share2,
+  Sun,
   X,
   ZoomIn,
   ZoomOut,
@@ -24,7 +26,7 @@ import {
   openNativeQuickLook,
   shareOrDownloadOutput,
 } from '../../infrastructure/native/omniNativeBridge';
-import { formatFileSize } from './formatBytes';
+import { formatFileSize, middleTruncate } from './formatBytes';
 
 export interface PreviewTarget {
   fileName: string;
@@ -80,30 +82,38 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [imgDims, setImgDims] = useState<{ w: number; h: number } | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [pdfDarkStage, setPdfDarkStage] = useState(true);
 
-  // PDF multi-page canvas / PDFKit state
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfTotal, setPdfTotal] = useState(0);
   const [pdfDataUrl, setPdfDataUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
-  // Dynamic text / CSV / DOCX / XLSX / Archive inspection state
   const [resolvedText, setResolvedText] = useState<string | null>(null);
   const [archiveList, setArchiveList] = useState<Array<{ name: string; size: number }> | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const ext = item ? inferExt(item.fileName, item.formatId) : '';
-  const isImage = Boolean(item && (item.mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'ico', 'svg'].includes(ext)));
-  const isVideo = Boolean(item && (item.mime.startsWith('video/') || ['mp4', 'mov', 'm4v', 'webm'].includes(ext)));
-  const isAudio = Boolean(item && (item.mime.startsWith('audio/') || ['m4a', 'm4r', 'wav', 'mp3', 'ogg', 'flac'].includes(ext)));
+  const isImage = Boolean(
+    item &&
+      (item.mime.startsWith('image/') ||
+        ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'ico', 'svg'].includes(ext)),
+  );
+  const isVideo = Boolean(
+    item && (item.mime.startsWith('video/') || ['mp4', 'mov', 'm4v', 'webm'].includes(ext)),
+  );
+  const isAudio = Boolean(
+    item && (item.mime.startsWith('audio/') || ['m4a', 'm4r', 'wav', 'mp3', 'ogg', 'flac'].includes(ext)),
+  );
   const isPdf = Boolean(item && (item.mime === 'application/pdf' || ext === 'pdf'));
-  const isArchive = Boolean(item && ['zip'].includes(ext));
+  const isArchive = Boolean(item && ext === 'zip');
   const isRichDoc = Boolean(item && ['docx', 'xlsx', 'ods', 'epub'].includes(ext));
-  const isTextLike = Boolean(item && (item.previewText || item.mime.startsWith('text/') || TEXT_EXTENSIONS.has(ext)));
+  const isTextLike = Boolean(
+    item && (item.previewText || item.mime.startsWith('text/') || TEXT_EXTENSIONS.has(ext)),
+  );
 
-  // Reset per-item state
   useEffect(() => {
     setZoom(1);
     setPdfPage(1);
@@ -116,7 +126,6 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     setArchiveList(null);
   }, [item]);
 
-  // Manage Blob Object URL for image/video/audio
   useEffect(() => {
     if (!item?.blob || (!isImage && !isVideo && !isAudio)) {
       setObjectUrl(null);
@@ -127,14 +136,13 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     return () => URL.revokeObjectURL(url);
   }, [item, isImage, isVideo, isAudio]);
 
-  // Render PDF page via native Apple PDFKit (iOS) or bundled PDF.js canvas (universal — zero broken iframe!)
   useEffect(() => {
     if (!isPdf || !item?.blob) return;
     let cancelled = false;
     setPdfLoading(true);
     setPdfError(null);
 
-    void renderPdfPageToDataUrl(item.blob, pdfPage, 1.55)
+    void renderPdfPageToDataUrl(item.blob, pdfPage, 1.75)
       .then((res) => {
         if (cancelled) return;
         setPdfDataUrl(res.dataUrl);
@@ -153,7 +161,6 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     };
   }, [isPdf, item, pdfPage]);
 
-  // Auto-load text / DOCX / XLSX / EPUB / ZIP contents for rich preview
   useEffect(() => {
     if (!item?.blob || item.previewText || isPdf || isImage || isVideo || isAudio) return;
     let cancelled = false;
@@ -166,7 +173,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
           const unzipped = unzipSync(bytes);
           const entries = Object.entries(unzipped)
             .filter(([name]) => !name.endsWith('/'))
-            .slice(0, 120)
+            .slice(0, 150)
             .map(([name, buf]) => ({ name, size: buf.byteLength }));
           if (!cancelled) setArchiveList(entries);
           return;
@@ -188,13 +195,13 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             try {
               txt = JSON.stringify(JSON.parse(txt), null, 2);
             } catch {
-              // Keep raw JSON text
+              // Keep raw JSON
             }
           }
           if (!cancelled) setResolvedText(txt);
         }
       } catch {
-        // Keep graceful fallback
+        // Fallback handled in UI
       } finally {
         if (!cancelled) setLoadingContent(false);
       }
@@ -227,150 +234,136 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
   return (
     <div
-      className="modal-backdrop"
+      className="fullscreen-view fullscreen-view--preview"
       role="dialog"
       aria-modal="true"
       aria-label={dict.preview.title}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
     >
-      <div className="modal-sheet" style={{ maxWidth: 640 }}>
-        <div className="sheet-grabber" />
-
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
-              {dict.preview.title}
-            </div>
-            <div className="truncate" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>
-              {item.fileName} • {formatFileSize(item.sizeBytes)}
-              {imgDims ? ` • ${imgDims.w}×${imgDims.h}` : ''}
-            </div>
-          </div>
+      {/* 1. Sticky Native iOS Top Navigation Bar (44x44pt Controls) */}
+      <header className="fullscreen-header">
+        <div className="fullscreen-header-inner">
           <button
             type="button"
             className="icon-btn"
             onClick={onClose}
             aria-label={dict.preview.close}
+            data-testid="preview-close-btn"
           >
-            <X size={17} />
+            <X size={20} />
           </button>
+
+          <div style={{ minWidth: 0, flex: 1, textAlign: 'center', padding: '0 4px' }}>
+            <div
+              className="truncate"
+              style={{ fontWeight: 700, fontSize: '0.96rem', color: 'var(--text-primary)' }}
+            >
+              {middleTruncate(item.fileName, 28)}
+            </div>
+            <div
+              className="truncate tabular"
+              style={{
+                fontSize: '0.74rem',
+                color: sizeDiffPct !== null && sizeDiffPct >= 5 ? 'var(--green-text)' : 'var(--text-muted)',
+                fontWeight: sizeDiffPct !== null && sizeDiffPct >= 5 ? 600 : 400,
+                marginTop: 1,
+              }}
+            >
+              {item.originalSizeBytes && item.originalSizeBytes > 0
+                ? `${formatFileSize(item.originalSizeBytes)} → ${formatFileSize(item.sizeBytes)}${
+                    sizeDiffPct !== null && sizeDiffPct >= 5 ? ` (-%${sizeDiffPct})` : ''
+                  }`
+                : `${formatFileSize(item.sizeBytes)}${imgDims ? ` · ${imgDims.w}×${imgDims.h}` : ''}`}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {isPdf && (
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setPdfDarkStage((v) => !v)}
+                aria-label="Toggle reading background"
+              >
+                {pdfDarkStage ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+            )}
+            {resolvedText !== null && !isPdf && !isImage && (
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => void handleCopyText()}
+                aria-label={dict.preview.copyText}
+              >
+                {copied ? <Check size={18} color="var(--green)" /> : <Copy size={18} />}
+              </button>
+            )}
+            {item.blob && (
+              <button
+                type="button"
+                className="icon-btn"
+                style={{ background: 'var(--accent)', color: '#FFFFFF' }}
+                onClick={() => void shareOrDownloadOutput(item.blob!, item.fileName)}
+                aria-label={dict.queue.share}
+              >
+                <Share2 size={18} />
+              </button>
+            )}
+          </div>
         </div>
+      </header>
 
-        {/* Before vs After Savings Pill */}
-        {item.originalSizeBytes && item.originalSizeBytes > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span className={sizeDiffPct !== null && sizeDiffPct >= 5 ? 'tag tag-local' : 'tag tag-accent'}>
-              {formatFileSize(item.originalSizeBytes)} → {formatFileSize(item.sizeBytes)}
-              {sizeDiffPct !== null && sizeDiffPct >= 5 ? ` (-%${sizeDiffPct})` : ''}
-            </span>
-          </div>
-        )}
-
-        {/* PDF Multi-Page & Zoom Controls */}
-        {isPdf && pdfTotal > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 8,
-              padding: '6px 10px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--sheet-card)',
-              border: '0.5px solid var(--separator)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <button
-                type="button"
-                className="icon-btn"
-                disabled={pdfPage <= 1 || pdfLoading}
-                onClick={() => setPdfPage((p) => Math.max(1, p - 1))}
-                aria-label="Previous page"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                {interpolate(dict.preview.pageOf, { page: pdfPage, total: pdfTotal })}
-              </span>
-              <button
-                type="button"
-                className="icon-btn"
-                disabled={pdfPage >= pdfTotal || pdfLoading}
-                onClick={() => setPdfPage((p) => Math.min(pdfTotal, p + 1))}
-                aria-label="Next page"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <button
-                type="button"
-                className="icon-btn"
-                disabled={zoom <= 0.75}
-                onClick={() => setZoom((z) => Math.max(0.75, +(z - 0.25).toFixed(2)))}
-                aria-label="Zoom out"
-              >
-                <ZoomOut size={15} />
-              </button>
-              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', minWidth: 40, textAlign: 'center' }}>
-                {Math.round(zoom * 100)}%
-              </span>
-              <button
-                type="button"
-                className="icon-btn"
-                disabled={zoom >= 2.25}
-                onClick={() => setZoom((z) => Math.min(2.25, +(z + 0.25).toFixed(2)))}
-                aria-label="Zoom in"
-              >
-                <ZoomIn size={15} />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Preview Stage */}
+      {/* 2. Full-Bleed Spacious Preview Canvas (~80% Viewport Height!) */}
+      <div
+        className={`fullscreen-body${isImage ? ' preview-checkerboard' : ''}`}
+        style={{
+          background: isPdf
+            ? pdfDarkStage
+              ? '#101014'
+              : '#E4E4EA'
+            : isImage
+              ? undefined
+              : 'var(--bg-app)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         <div
-          className={isImage ? 'preview-checkerboard' : undefined}
           style={{
-            borderRadius: 'var(--radius-md)',
-            background: isImage ? undefined : 'var(--sheet-card)',
-            border: '0.5px solid var(--separator)',
-            padding: isPdf || isImage ? 10 : 14,
-            maxHeight: '52dvh',
-            minHeight: 140,
-            overflow: 'auto',
-            WebkitOverflowScrolling: 'touch',
+            flex: 1,
+            width: '100%',
+            maxWidth: isPdf || isImage ? 920 : 720,
+            margin: '0 auto',
+            padding: isPdf || isImage ? '16px 14px 24px 14px' : '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: isPdf || isImage || isVideo ? 'center' : 'stretch',
+            justifyContent: isImage || isVideo || isAudio ? 'center' : 'flex-start',
           }}
         >
-          {/* Image */}
+          {/* Image Full-Screen Viewer */}
           {isImage && objectUrl && (
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <img
-                src={objectUrl}
-                alt={item.fileName}
-                onLoad={(e) =>
-                  setImgDims({
-                    w: e.currentTarget.naturalWidth,
-                    h: e.currentTarget.naturalHeight,
-                  })
-                }
-                style={{
-                  width: `${Math.round(zoom * 100)}%`,
-                  maxWidth: zoom <= 1 ? '100%' : 'none',
-                  height: 'auto',
-                  borderRadius: 10,
-                  display: 'block',
-                }}
-              />
-            </div>
+            <img
+              src={objectUrl}
+              alt={item.fileName}
+              onLoad={(e) =>
+                setImgDims({
+                  w: e.currentTarget.naturalWidth,
+                  h: e.currentTarget.naturalHeight,
+                })
+              }
+              style={{
+                width: zoom === 1 ? 'auto' : `${Math.round(zoom * 100)}%`,
+                maxWidth: zoom <= 1 ? '100%' : 'none',
+                maxHeight: zoom <= 1 ? '72dvh' : 'none',
+                height: 'auto',
+                objectFit: 'contain',
+                borderRadius: 12,
+                boxShadow: '0 8px 30px rgba(0,0,0,0.28)',
+              }}
+            />
           )}
 
-          {/* Video */}
+          {/* Video Full-Screen Inline Player */}
           {isVideo && objectUrl && (
             <video
               controls
@@ -379,29 +372,28 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
               src={objectUrl}
               style={{
                 width: '100%',
-                maxHeight: '44dvh',
-                borderRadius: 10,
+                maxHeight: '72dvh',
+                borderRadius: 14,
                 background: '#000000',
-                display: 'block',
               }}
             />
           )}
 
-          {/* Audio */}
+          {/* Audio Player Card */}
           {isAudio && objectUrl && (
-            <div style={{ padding: '16px 4px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+            <div className="card" style={{ width: '100%', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                 {item.fileName}
               </div>
               <audio controls src={objectUrl} style={{ width: '100%' }} />
             </div>
           )}
 
-          {/* Multi-Page PDF Rendered Image (Zero Broken Iframe!) */}
+          {/* Multi-Page PDF Canvas / PDFKit Full-Bleed Viewer */}
           {isPdf && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            <>
               {pdfLoading && !pdfDataUrl && (
-                <div style={{ padding: 28, fontSize: '0.86rem', color: 'var(--text-muted)' }}>
+                <div style={{ padding: 48, fontSize: '0.92rem', color: 'var(--text-muted)' }}>
                   {dict.preview.loading}
                 </div>
               )}
@@ -414,34 +406,35 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
                     maxWidth: zoom <= 1 ? '100%' : 'none',
                     height: 'auto',
                     borderRadius: 8,
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.22)',
-                    opacity: pdfLoading ? 0.6 : 1,
+                    background: '#FFFFFF',
+                    boxShadow: '0 10px 34px rgba(0,0,0,0.34)',
+                    opacity: pdfLoading ? 0.65 : 1,
                     transition: 'opacity 0.15s ease',
                   }}
                 />
               )}
               {pdfError && (
-                <div style={{ padding: 16, fontSize: '0.84rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                <div className="card" style={{ marginTop: 24, textAlign: 'center', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
                   {dict.preview.noInlinePreview}
                 </div>
               )}
-            </div>
+            </>
           )}
 
-          {/* Archive Contents List */}
+          {/* Archive Contents Explorer */}
           {isArchive && archiveList && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                <FileArchive size={16} color="var(--accent)" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                <FileArchive size={18} color="var(--accent)" />
                 <span>{interpolate(dict.preview.archiveItems, { count: archiveList.length })}</span>
               </div>
               <div className="ios-group">
                 {archiveList.map((entry) => (
-                  <div key={entry.name} className="ios-row" style={{ minHeight: 40, padding: '8px 12px' }}>
-                    <span className="truncate" style={{ fontSize: '0.82rem', color: 'var(--text-primary)', flex: 1 }}>
+                  <div key={entry.name} className="ios-row">
+                    <span className="truncate" style={{ fontSize: '0.88rem', color: 'var(--text-primary)', flex: 1 }}>
                       {entry.name}
                     </span>
-                    <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                    <span className="tabular" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', flexShrink: 0 }}>
                       {formatFileSize(entry.size)}
                     </span>
                   </div>
@@ -450,85 +443,171 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             </div>
           )}
 
-          {/* Text / JSON / CSV / DOCX / XLSX / EPUB / Markdown */}
+          {/* Spacious Full-Height Text / Code / DOCX / XLSX / EPUB Reader */}
           {!isPdf && !isImage && !isVideo && !isAudio && !archiveList && resolvedText !== null && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  style={{ minHeight: 32, padding: '5px 12px', fontSize: '0.78rem' }}
-                  onClick={() => void handleCopyText()}
-                >
-                  {copied ? <Check size={14} color="var(--green)" /> : <Copy size={14} />}
-                  <span>{copied ? dict.preview.copied : dict.preview.copyText}</span>
-                </button>
-              </div>
+            <div className="card" style={{ padding: 18 }}>
               <pre
                 style={{
                   margin: 0,
                   fontFamily: 'var(--font-mono)',
-                  fontSize: '0.8rem',
-                  lineHeight: 1.5,
+                  fontSize: '0.86rem',
+                  lineHeight: 1.62,
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                   color: 'var(--text-primary)',
                 }}
               >
-                {resolvedText.slice(0, 18000)}
+                {resolvedText.slice(0, 24000)}
               </pre>
             </div>
           )}
 
-          {/* Loading or Unsupported Fallback */}
           {loadingContent && !resolvedText && !archiveList && (
-            <div style={{ padding: 24, textAlign: 'center', fontSize: '0.86rem', color: 'var(--text-muted)' }}>
+            <div style={{ padding: 48, textAlign: 'center', fontSize: '0.92rem', color: 'var(--text-muted)' }}>
               {dict.preview.loading}
             </div>
           )}
 
           {!loadingContent && !isImage && !isVideo && !isAudio && !isPdf && !archiveList && resolvedText === null && (
-            <p style={{ margin: 0, padding: 12, fontSize: '0.86rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-              {dict.preview.noInlinePreview}
-            </p>
+            <div className="card" style={{ marginTop: 24, textAlign: 'center', padding: 24 }}>
+              <p style={{ margin: 0, fontSize: '0.92rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                {dict.preview.noInlinePreview}
+              </p>
+            </div>
           )}
         </div>
+      </div>
 
-        {/* Native iOS QuickLook Full-Screen Button */}
-        {isNativeIos() && item.blob && (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            style={{ width: '100%' }}
-            onClick={() => void openNativeQuickLook(item.blob!, item.fileName)}
-          >
-            <Maximize2 size={16} />
-            <span>{dict.preview.quickLook}</span>
-          </button>
-        )}
-
-        {/* Share & Save */}
-        {item.blob && (
-          <div className="grid-2">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => void shareOrDownloadOutput(item.blob!, item.fileName)}
+      {/* 3. Spacious Docked Bottom Controls & Actions Bar (44px+ Tap Targets, >=12px Spacing) */}
+      <footer className="fullscreen-footer">
+        <div className="fullscreen-footer-inner">
+          {/* PDF Page Navigator + Zoom Controls */}
+          {isPdf && pdfTotal > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
             >
-              <Share2 size={16} />
-              <span>{dict.queue.share}</span>
-            </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  disabled={pdfPage <= 1 || pdfLoading}
+                  onClick={() => setPdfPage((p) => Math.max(1, p - 1))}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <span
+                  className="tabular"
+                  style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}
+                >
+                  {interpolate(dict.preview.pageOf, { page: pdfPage, total: pdfTotal })}
+                </span>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  disabled={pdfPage >= pdfTotal || pdfLoading}
+                  onClick={() => setPdfPage((p) => Math.min(pdfTotal, p + 1))}
+                  aria-label="Next page"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  disabled={zoom <= 0.75}
+                  onClick={() => setZoom((z) => Math.max(0.75, +(z - 0.25).toFixed(2)))}
+                  aria-label="Zoom out"
+                >
+                  <ZoomOut size={18} />
+                </button>
+                <span className="tabular" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', minWidth: 44, textAlign: 'center' }}>
+                  {Math.round(zoom * 100)}%
+                </span>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  disabled={zoom >= 2.25}
+                  onClick={() => setZoom((z) => Math.min(2.25, +(z + 0.25).toFixed(2)))}
+                  aria-label="Zoom in"
+                >
+                  <ZoomIn size={18} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Image Zoom Controls */}
+          {isImage && objectUrl && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+              <button
+                type="button"
+                className="icon-btn"
+                disabled={zoom <= 0.75}
+                onClick={() => setZoom((z) => Math.max(0.75, +(z - 0.25).toFixed(2)))}
+                aria-label="Zoom out"
+              >
+                <ZoomOut size={18} />
+              </button>
+              <span className="tabular" style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--text-primary)', minWidth: 50, textAlign: 'center' }}>
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                type="button"
+                className="icon-btn"
+                disabled={zoom >= 2.5}
+                onClick={() => setZoom((z) => Math.min(2.5, +(z + 0.25).toFixed(2)))}
+                aria-label="Zoom in"
+              >
+                <ZoomIn size={18} />
+              </button>
+            </div>
+          )}
+
+          {/* Native iOS QuickLook Full-Screen Button */}
+          {isNativeIos() && item.blob && (
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => void shareOrDownloadOutput(item.blob!, item.fileName)}
+              style={{ width: '100%' }}
+              onClick={() => void openNativeQuickLook(item.blob!, item.fileName)}
             >
-              <Download size={16} />
-              <span>{dict.queue.save}</span>
+              <Maximize2 size={18} />
+              <span>{dict.preview.quickLook}</span>
             </button>
-          </div>
-        )}
-      </div>
+          )}
+
+          {/* Primary Share & Save Actions */}
+          {item.blob && (
+            <div className="grid-2">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void shareOrDownloadOutput(item.blob!, item.fileName)}
+              >
+                <Share2 size={18} />
+                <span>{dict.queue.share}</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => void shareOrDownloadOutput(item.blob!, item.fileName)}
+              >
+                <Download size={18} />
+                <span>{dict.queue.save}</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </footer>
     </div>
   );
 };

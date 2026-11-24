@@ -14,7 +14,7 @@ import {
   Music,
   ScanText,
   Scissors,
-  X,
+  Trash2,
 } from 'lucide-react';
 import { useApp, type SelectedInputItem } from '../../application/AppContext';
 import { interpolate } from '../../core/i18n';
@@ -26,27 +26,27 @@ import {
 } from '../../domain/tools/toolCatalog';
 import { readClipboardContent } from '../../infrastructure/native/omniNativeBridge';
 import { FilePreviewModal, type PreviewTarget } from '../components/FilePreviewModal';
-import { formatFileSize } from '../components/formatBytes';
+import { formatFileSize, middleTruncate } from '../components/formatBytes';
 import { ToolWorkspaceSheet } from './ToolWorkspaceSheet';
 
 function renderToolIcon(toolId: GuidedToolId) {
   switch (toolId) {
     case 'pdf-merge':
-      return <Layers size={20} strokeWidth={2} />;
+      return <Layers size={21} strokeWidth={2} />;
     case 'images-to-pdf':
-      return <FileText size={20} strokeWidth={2} />;
+      return <FileText size={21} strokeWidth={2} />;
     case 'pdf-tools':
-      return <Scissors size={20} strokeWidth={2} />;
+      return <Scissors size={21} strokeWidth={2} />;
     case 'image-convert':
-      return <ImageIcon size={20} strokeWidth={2} />;
+      return <ImageIcon size={21} strokeWidth={2} />;
     case 'video-audio':
-      return <Music size={20} strokeWidth={2} />;
+      return <Music size={21} strokeWidth={2} />;
     case 'video-compress':
-      return <Film size={20} strokeWidth={2} />;
+      return <Film size={21} strokeWidth={2} />;
     case 'ocr-extract':
-      return <ScanText size={20} strokeWidth={2} />;
+      return <ScanText size={21} strokeWidth={2} />;
     default:
-      return <FileArchive size={20} strokeWidth={2} />;
+      return <FileArchive size={21} strokeWidth={2} />;
   }
 }
 
@@ -75,7 +75,6 @@ export const ConvertScreen: React.FC = () => {
   } | null>(null);
   const [previewItem, setPreviewItem] = useState<PreviewTarget | null>(null);
 
-  // If user tapped "Use" on a saved custom preset in History, launch workspace with it immediately
   useEffect(() => {
     if (!pendingPresetLaunch) return;
     setActiveWorkspace({
@@ -135,7 +134,7 @@ export const ConvertScreen: React.FC = () => {
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <input
         ref={fileInputRef}
         data-testid="file-input"
@@ -162,7 +161,7 @@ export const ConvertScreen: React.FC = () => {
       />
 
       {/* 1. Primary Universal Picker Surface */}
-      <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <button
           type="button"
           data-testid="pick-files-btn"
@@ -170,8 +169,8 @@ export const ConvertScreen: React.FC = () => {
           className="card"
           style={{
             width: '100%',
-            padding: '22px 18px',
-            border: '1px dashed var(--separator-strong)',
+            padding: '20px 18px',
+            border: '1.5px dashed var(--separator-strong)',
             display: 'flex',
             alignItems: 'center',
             gap: 14,
@@ -180,8 +179,8 @@ export const ConvertScreen: React.FC = () => {
         >
           <div
             style={{
-              width: 48,
-              height: 48,
+              width: 50,
+              height: 50,
               borderRadius: 14,
               background: 'var(--accent-soft)',
               color: 'var(--accent)',
@@ -191,24 +190,24 @@ export const ConvertScreen: React.FC = () => {
               flexShrink: 0,
             }}
           >
-            <FilePlus2 size={24} strokeWidth={1.9} />
+            <FilePlus2 size={24} strokeWidth={2} />
           </div>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            <div style={{ fontSize: '1.02rem', fontWeight: 700, color: 'var(--text-primary)' }}>
               {dict.convert.dropTitle}
             </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 3, lineHeight: 1.35 }}>
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.38 }}>
               {dict.convert.dropSubtitle}
             </div>
           </div>
         </button>
 
-        {/* Clean 3-Source Action Strip */}
+        {/* Clean 3-Source Strip (Comfortable 50px Height) */}
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-            gap: 8,
+            gap: 10,
           }}
         >
           <button
@@ -216,17 +215,18 @@ export const ConvertScreen: React.FC = () => {
             onClick={() => mediaInputRef.current?.click()}
             className="card"
             style={{
-              padding: '11px 8px',
+              minHeight: 50,
+              padding: '10px 8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 7,
-              fontSize: '0.82rem',
+              fontSize: '0.84rem',
               fontWeight: 600,
               color: 'var(--text-primary)',
             }}
           >
-            <ImageIcon size={17} strokeWidth={1.9} color="var(--accent)" style={{ flexShrink: 0 }} />
+            <ImageIcon size={18} strokeWidth={1.9} color="var(--accent)" style={{ flexShrink: 0 }} />
             <span className="truncate">{dict.convert.pickMedia}</span>
           </button>
 
@@ -235,17 +235,18 @@ export const ConvertScreen: React.FC = () => {
             onClick={() => cameraInputRef.current?.click()}
             className="card"
             style={{
-              padding: '11px 8px',
+              minHeight: 50,
+              padding: '10px 8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 7,
-              fontSize: '0.82rem',
+              fontSize: '0.84rem',
               fontWeight: 600,
               color: 'var(--text-primary)',
             }}
           >
-            <Camera size={17} strokeWidth={1.9} color="var(--accent)" style={{ flexShrink: 0 }} />
+            <Camera size={18} strokeWidth={1.9} color="var(--accent)" style={{ flexShrink: 0 }} />
             <span className="truncate">{dict.convert.scanCamera}</span>
           </button>
 
@@ -254,32 +255,33 @@ export const ConvertScreen: React.FC = () => {
             onClick={() => void handlePasteClipboard()}
             className="card"
             style={{
-              padding: '11px 8px',
+              minHeight: 50,
+              padding: '10px 8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 7,
-              fontSize: '0.82rem',
+              fontSize: '0.84rem',
               fontWeight: 600,
               color: 'var(--text-primary)',
             }}
           >
-            <ClipboardPaste size={17} strokeWidth={1.9} color="var(--accent)" style={{ flexShrink: 0 }} />
+            <ClipboardPaste size={18} strokeWidth={1.9} color="var(--accent)" style={{ flexShrink: 0 }} />
             <span className="truncate">{dict.convert.pasteClipboard}</span>
           </button>
         </div>
       </section>
 
-      {/* 2. Selected Files (with Instant Preview & Reorder) */}
+      {/* 2. Selected Files (Spacious File Cards — Zero Cramming!) */}
       {selectedInputs.length > 0 && (
-        <section>
+        <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: '0 6px 8px 6px',
-              gap: 8,
+              padding: '0 4px',
+              gap: 10,
             }}
           >
             <span className="section-header" style={{ padding: 0, margin: 0 }}>
@@ -290,10 +292,11 @@ export const ConvertScreen: React.FC = () => {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 style={{
+                  minHeight: 36,
+                  padding: '4px 6px',
                   color: 'var(--accent)',
-                  fontSize: '0.82rem',
+                  fontSize: '0.84rem',
                   fontWeight: 600,
-                  padding: 0,
                 }}
               >
                 {dict.convert.addMore}
@@ -302,10 +305,11 @@ export const ConvertScreen: React.FC = () => {
                 type="button"
                 onClick={clearSelectedInputs}
                 style={{
+                  minHeight: 36,
+                  padding: '4px 6px',
                   color: 'var(--text-muted)',
-                  fontSize: '0.82rem',
+                  fontSize: '0.84rem',
                   fontWeight: 500,
-                  padding: 0,
                 }}
               >
                 {dict.convert.clearSelection}
@@ -313,105 +317,133 @@ export const ConvertScreen: React.FC = () => {
             </div>
           </div>
 
-          <div className="ios-group">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {selectedInputs.map((item, idx) => (
-              <div key={item.id} className="ios-row" style={{ gap: 10 }}>
-                {item.thumbUrl ? (
-                  <img
-                    src={item.thumbUrl}
-                    alt={item.file.name}
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 9,
-                      objectFit: 'cover',
-                      flexShrink: 0,
-                      border: '0.5px solid var(--separator)',
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 10,
-                      background: 'var(--bg-fill)',
-                      color: 'var(--text-primary)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 700,
-                      fontSize: '0.7rem',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {item.inspection.detectedFormatId.toUpperCase().slice(0, 4)}
+              <div key={item.id} className="file-item-card">
+                <div className="file-item-main">
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    {item.thumbUrl ? (
+                      <img
+                        src={item.thumbUrl}
+                        alt={item.file.name}
+                        style={{
+                          width: 46,
+                          height: 46,
+                          borderRadius: 10,
+                          objectFit: 'cover',
+                          display: 'block',
+                          border: '0.5px solid var(--separator)',
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: 46,
+                          height: 46,
+                          borderRadius: 10,
+                          background: 'var(--bg-fill)',
+                          color: 'var(--text-primary)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                          fontSize: '0.72rem',
+                        }}
+                      >
+                        {item.inspection.detectedFormatId.toUpperCase().slice(0, 4)}
+                      </div>
+                    )}
+                    {selectedInputs.length > 1 && (
+                      <span
+                        className="tabular"
+                        style={{
+                          position: 'absolute',
+                          top: -6,
+                          left: -6,
+                          width: 21,
+                          height: 21,
+                          borderRadius: '50%',
+                          background: 'var(--accent)',
+                          color: '#FFFFFF',
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        {idx + 1}
+                      </span>
+                    )}
                   </div>
-                )}
 
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div className="truncate" style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                    {item.file.name}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
-                    <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
-                      {formatFileSize(item.file.size)}
-                      {item.pageCount ? ` • ${interpolate(dict.convert.pagesLabel, { count: item.pageCount })}` : ''}
-                    </span>
-                    {item.inspection.isExtensionMismatch && (
-                      <span className="tag tag-warn">.{item.inspection.detectedFormatId.toUpperCase()}</span>
-                    )}
-                    {item.inspection.isEncrypted && (
-                      <span className="tag tag-danger">{dict.convert.encryptedHint}</span>
-                    )}
-                    {item.inspection.hasDrm && (
-                      <span className="tag tag-danger">{dict.convert.drmHint}</span>
-                    )}
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.94rem', color: 'var(--text-primary)', wordBreak: 'break-word' }}>
+                      {middleTruncate(item.file.name, 34)}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 3 }}>
+                      <span className="tabular" style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        {formatFileSize(item.file.size)}
+                        {item.pageCount
+                          ? ` · ${interpolate(dict.convert.pagesLabel, { count: item.pageCount })}`
+                          : ''}
+                      </span>
+                      {item.inspection.isExtensionMismatch && (
+                        <span className="tag tag-warn">.{item.inspection.detectedFormatId.toUpperCase()}</span>
+                      )}
+                      {item.inspection.isEncrypted && (
+                        <span className="tag tag-danger">{dict.convert.encryptedHint}</span>
+                      )}
+                      {item.inspection.hasDrm && (
+                        <span className="tag tag-danger">{dict.convert.drmHint}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                <div
+                  className={`file-item-actions${
+                    selectedInputs.length === 1 ? ' file-item-actions--two' : ''
+                  }`}
+                >
                   <button
                     type="button"
-                    className="icon-btn"
-                    aria-label={dict.queue.preview}
+                    className="file-action-pill"
                     onClick={() => openInputPreview(item)}
-                    style={{ width: 30, height: 30, minWidth: 30, minHeight: 30 }}
                   >
-                    <Eye size={14} />
+                    <Eye size={15} />
+                    <span>{dict.queue.preview}</span>
                   </button>
                   {selectedInputs.length > 1 && (
                     <>
                       <button
                         type="button"
-                        className="icon-btn"
-                        aria-label="Move up"
+                        className="file-action-pill"
                         disabled={idx === 0}
                         onClick={() => moveSelectedInput(item.id, 'up')}
-                        style={{ width: 28, height: 28, minWidth: 28, minHeight: 28 }}
+                        aria-label="Move up"
                       >
-                        <ArrowUp size={13} />
+                        <ArrowUp size={15} />
                       </button>
                       <button
                         type="button"
-                        className="icon-btn"
-                        aria-label="Move down"
+                        className="file-action-pill"
                         disabled={idx === selectedInputs.length - 1}
                         onClick={() => moveSelectedInput(item.id, 'down')}
-                        style={{ width: 28, height: 28, minWidth: 28, minHeight: 28 }}
+                        aria-label="Move down"
                       >
-                        <ArrowDown size={13} />
+                        <ArrowDown size={15} />
                       </button>
                     </>
                   )}
                   <button
                     type="button"
-                    className="icon-btn"
-                    aria-label="Remove"
+                    className="file-action-pill file-action-pill--danger"
                     onClick={() => removeSelectedInput(item.id)}
-                    style={{ width: 28, height: 28, minWidth: 28, minHeight: 28 }}
+                    aria-label={dict.history.deletePreset}
                   >
-                    <X size={14} />
+                    <Trash2 size={15} />
+                    {selectedInputs.length === 1 && <span>{dict.history.deletePreset}</span>}
                   </button>
                 </div>
               </div>
@@ -420,9 +452,9 @@ export const ConvertScreen: React.FC = () => {
 
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-primary btn-lg"
             data-testid="choose-target-btn"
-            style={{ width: '100%', marginTop: 10 }}
+            style={{ width: '100%' }}
             onClick={() => setActiveWorkspace({ toolId: 'universal' })}
           >
             {selectedInputs.length === 1
@@ -432,8 +464,8 @@ export const ConvertScreen: React.FC = () => {
         </section>
       )}
 
-      {/* 3. Zero-Confusion Guided Tool Grid (iLovePDF + Media Converter inspired) */}
-      <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* 3. Spacious 2-Column Guided Tool Grid */}
+      <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div className="pill-strip" role="tablist" aria-label={dict.convert.presetsTitle}>
           {categories.map((cat) => (
             <button
@@ -470,7 +502,7 @@ export const ConvertScreen: React.FC = () => {
                   <div
                     style={{
                       fontWeight: 700,
-                      fontSize: '0.92rem',
+                      fontSize: '0.96rem',
                       lineHeight: 1.25,
                       color: 'var(--text-primary)',
                     }}
@@ -479,10 +511,10 @@ export const ConvertScreen: React.FC = () => {
                   </div>
                   <div
                     style={{
-                      fontSize: '0.76rem',
-                      lineHeight: 1.35,
+                      fontSize: '0.78rem',
+                      lineHeight: 1.38,
                       color: 'var(--text-muted)',
-                      marginTop: 4,
+                      marginTop: 5,
                     }}
                   >
                     {copy.subtitle}

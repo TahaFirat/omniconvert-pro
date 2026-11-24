@@ -1,20 +1,28 @@
 import React, { useState } from 'react';
-import { Archive, Eye, RotateCcw, Share2, X } from 'lucide-react';
+import { Archive, CheckCircle2, Eye, RotateCcw, Share2, X } from 'lucide-react';
 import { useApp } from '../../application/AppContext';
 import { interpolate } from '../../core/i18n';
 import type { ConversionOutput } from '../../domain/entities/job';
 import { shareOrDownloadOutput } from '../../infrastructure/native/omniNativeBridge';
 import { FilePreviewModal } from '../components/FilePreviewModal';
-import { formatFileSize } from '../components/formatBytes';
+import { formatFileSize, middleTruncate } from '../components/formatBytes';
 import { PrivacyBadge } from '../components/PrivacyBadge';
 
-function formatSizeComparison(beforeBytes: number, afterBytes?: number): string {
-  if (!afterBytes || afterBytes <= 0) return formatFileSize(beforeBytes);
+function getSizeSummary(beforeBytes: number, afterBytes?: number): { text: string; saved: boolean } {
+  if (!afterBytes || afterBytes <= 0) {
+    return { text: formatFileSize(beforeBytes), saved: false };
+  }
   const diffPct = Math.round(((beforeBytes - afterBytes) / Math.max(1, beforeBytes)) * 100);
   if (diffPct >= 5) {
-    return `${formatFileSize(beforeBytes)} → ${formatFileSize(afterBytes)} (-%${diffPct})`;
+    return {
+      text: `${formatFileSize(beforeBytes)} → ${formatFileSize(afterBytes)} (-%${diffPct})`,
+      saved: true,
+    };
   }
-  return `${formatFileSize(beforeBytes)} → ${formatFileSize(afterBytes)}`;
+  return {
+    text: `${formatFileSize(beforeBytes)} → ${formatFileSize(afterBytes)}`,
+    saved: false,
+  };
 }
 
 export const QueueScreen: React.FC = () => {
@@ -36,22 +44,22 @@ export const QueueScreen: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {jobs.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
           {completedCount >= 2 && (
             <button
               type="button"
               className="btn btn-secondary"
-              style={{ minHeight: 36, padding: '6px 12px', fontSize: '0.82rem' }}
+              style={{ minHeight: 42, padding: '8px 14px', fontSize: '0.84rem' }}
               onClick={() => void bundleCompletedAsZip()}
             >
-              <Archive size={15} />
+              <Archive size={16} />
               <span>{dict.queue.bundleZip}</span>
             </button>
           )}
           <button
             type="button"
             className="btn btn-ghost"
-            style={{ minHeight: 36, padding: '6px 10px', fontSize: '0.84rem' }}
+            style={{ minHeight: 42, padding: '8px 12px', fontSize: '0.86rem' }}
             onClick={clearCompletedJobs}
           >
             {dict.queue.clearCompleted}
@@ -60,16 +68,16 @@ export const QueueScreen: React.FC = () => {
       )}
 
       {jobs.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: '44px 20px' }}>
-          <div style={{ fontWeight: 600, fontSize: '0.98rem', color: 'var(--text-primary)' }}>
+        <div className="card" style={{ textAlign: 'center', padding: '48px 22px' }}>
+          <div style={{ fontWeight: 700, fontSize: '1.02rem', color: 'var(--text-primary)' }}>
             {dict.queue.emptyTitle}
           </div>
-          <p style={{ margin: '6px 0 0 0', fontSize: '0.84rem', color: 'var(--text-muted)' }}>
+          <p style={{ margin: '8px 0 0 0', fontSize: '0.88rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
             {dict.queue.emptyDesc}
           </p>
         </div>
       ) : (
-        <div className="ios-group">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {jobs.map((job) => {
             const statusText =
               job.status === 'queued'
@@ -82,23 +90,43 @@ export const QueueScreen: React.FC = () => {
                       ? dict.queue.statusCancelled
                       : dict.queue.statusFailed;
 
+            const sizeSummary = getSizeSummary(job.file.size, job.output?.sizeBytes);
+
             return (
               <article
                 key={job.id}
-                className="ios-row"
+                className="card"
                 data-testid={`queue-job-${job.status}`}
-                style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10, padding: '14px 15px' }}
+                style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="truncate" style={{ fontWeight: 600, fontSize: '0.94rem', color: 'var(--text-primary)' }}>
-                      {job.output?.fileName ?? job.file.name}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 7,
+                        fontWeight: 700,
+                        fontSize: '0.96rem',
+                        color: 'var(--text-primary)',
+                      }}
+                    >
+                      {job.status === 'completed' && (
+                        <CheckCircle2 size={18} color="var(--green)" style={{ flexShrink: 0 }} />
+                      )}
+                      <span className="truncate">
+                        {middleTruncate(job.output?.fileName ?? job.file.name, 34)}
+                      </span>
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 3 }}>
-                      {statusText} • {formatSizeComparison(job.file.size, job.output?.sizeBytes)}
-                      {job.status === 'running' && job.etaSeconds
-                        ? ` • ${interpolate(dict.queue.etaSeconds, { sec: job.etaSeconds })}`
-                        : ''}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+                      <span className={sizeSummary.saved ? 'tag tag-local tabular' : 'tag tag-accent tabular'}>
+                        {statusText} · {sizeSummary.text}
+                      </span>
+                      {job.status === 'running' && job.etaSeconds && (
+                        <span className="tabular" style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                          {interpolate(dict.queue.etaSeconds, { sec: job.etaSeconds })}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <PrivacyBadge tier={job.plan.highestTier} compact />
@@ -111,68 +139,64 @@ export const QueueScreen: React.FC = () => {
                 )}
 
                 {job.errorMessage && (
-                  <div style={{ fontSize: '0.8rem', color: 'var(--red-text)', lineHeight: 1.4 }}>
+                  <div style={{ fontSize: '0.84rem', color: 'var(--red-text)', lineHeight: 1.45 }}>
                     {job.errorMessage}
                     {job.trialRefunded ? ` (${dict.queue.trialRefunded})` : ''}
                   </div>
                 )}
 
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {(job.status === 'running' || job.status === 'queued') && (
+                {(job.status === 'running' || job.status === 'queued') && (
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    style={{ width: '100%' }}
+                    onClick={() => cancelJob(job.id)}
+                  >
+                    <X size={16} />
+                    <span>{dict.queue.cancel}</span>
+                  </button>
+                )}
+
+                {job.status === 'completed' && job.output?.blob && (
+                  <div className="grid-2">
                     <button
                       type="button"
-                      className="btn btn-danger"
-                      style={{ minHeight: 36, padding: '6px 13px', fontSize: '0.8rem' }}
-                      onClick={() => cancelJob(job.id)}
-                    >
-                      <X size={14} />
-                      <span>{dict.queue.cancel}</span>
-                    </button>
-                  )}
-
-                  {job.status === 'completed' && job.output?.blob && (
-                    <>
-                      <button
-                        type="button"
-                        data-testid="queue-preview-btn"
-                        className="btn btn-secondary"
-                        style={{ minHeight: 38, padding: '7px 14px', fontSize: '0.82rem' }}
-                        onClick={() =>
-                          setPreviewState({
-                            output: job.output!,
-                            originalBytes: job.file.size,
-                          })
-                        }
-                      >
-                        <Eye size={15} />
-                        <span>{dict.queue.preview}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        style={{ minHeight: 38, padding: '7px 14px', fontSize: '0.82rem' }}
-                        onClick={() =>
-                          void shareOrDownloadOutput(job.output!.blob!, job.output!.fileName)
-                        }
-                      >
-                        <Share2 size={15} />
-                        <span>{dict.queue.share}</span>
-                      </button>
-                    </>
-                  )}
-
-                  {(job.status === 'failed' || job.status === 'cancelled') && (
-                    <button
-                      type="button"
+                      data-testid="queue-preview-btn"
                       className="btn btn-secondary"
-                      style={{ minHeight: 36, padding: '6px 13px', fontSize: '0.8rem' }}
-                      onClick={() => retryJob(job.id)}
+                      onClick={() =>
+                        setPreviewState({
+                          output: job.output!,
+                          originalBytes: job.file.size,
+                        })
+                      }
                     >
-                      <RotateCcw size={14} />
-                      <span>{dict.queue.retry}</span>
+                      <Eye size={17} />
+                      <span>{dict.queue.preview}</span>
                     </button>
-                  )}
-                </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() =>
+                        void shareOrDownloadOutput(job.output!.blob!, job.output!.fileName)
+                      }
+                    >
+                      <Share2 size={17} />
+                      <span>{dict.queue.share}</span>
+                    </button>
+                  </div>
+                )}
+
+                {(job.status === 'failed' || job.status === 'cancelled') && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ width: '100%' }}
+                    onClick={() => retryJob(job.id)}
+                  >
+                    <RotateCcw size={16} />
+                    <span>{dict.queue.retry}</span>
+                  </button>
+                )}
               </article>
             );
           })}
