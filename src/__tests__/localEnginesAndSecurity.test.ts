@@ -16,6 +16,10 @@ import {
   safeUnzip,
 } from '../infrastructure/local/localArchiveConverter';
 import { encodeWavFromChannels } from '../infrastructure/local/localAudioConverter';
+import {
+  stripJpegMetadataLossless,
+  stripPngMetadataLossless,
+} from '../infrastructure/local/losslessMetadataStripper';
 import { convertDataLocally } from '../infrastructure/local/localDataConverter';
 import {
   mergePdfsLocally,
@@ -110,6 +114,32 @@ describe('Physical Network Guard & Local Tier 2 Engines', () => {
     expect(new TextDecoder().decode(wav.subarray(0, 4))).toBe('RIFF');
     expect(new TextDecoder().decode(wav.subarray(8, 12))).toBe('WAVE');
     expect(wav.byteLength).toBe(44 + 4 * 2);
+  });
+
+  it('strips JPEG APP1 EXIF & PNG tEXt metadata losslessly while shrinking byte size', () => {
+    // Construct synthetic JPEG: SOI + APP1(Exif, 14 bytes) + SOS + scan bytes + EOI
+    const fakeJpeg = new Uint8Array([
+      0xff, 0xd8, // SOI
+      0xff, 0xe1, 0x00, 0x10, // APP1 length 16
+      0x45, 0x78, 0x69, 0x66, 0x00, 0x00, 0, 0, 0, 0, 0, 0, 0, 0,
+      0xff, 0xda, 0x00, 0x04, 0x11, 0x22, 0xff, 0xd9, // SOS + data + EOI
+    ]);
+    const jpegRes = stripJpegMetadataLossless(fakeJpeg);
+    expect(jpegRes.strippedSegments).toBe(1);
+    expect(jpegRes.orientation).toBe(1);
+    expect(jpegRes.bytes.byteLength).toBeLessThan(fakeJpeg.byteLength);
+    expect(jpegRes.bytes[0]).toBe(0xff);
+    expect(jpegRes.bytes[1]).toBe(0xd8);
+
+    // Construct synthetic PNG: Signature + IHDR(0) + tEXt(4) + IEND(0)
+    const fakePng = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      0, 0, 0, 0, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 0, // IHDR
+      0, 0, 0, 4, 0x74, 0x45, 0x58, 0x74, 65, 66, 67, 68, 0, 0, 0, 0, // tEXt
+      0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0, 0, 0, 0, // IEND
+    ]);
+    const cleanedPng = stripPngMetadataLossless(fakePng);
+    expect(cleanedPng.byteLength).toBe(fakePng.byteLength - 16);
   });
 });
 

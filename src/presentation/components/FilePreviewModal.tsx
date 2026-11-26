@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Columns2,
   Copy,
   Download,
   FileArchive,
@@ -36,12 +38,14 @@ export interface PreviewTarget {
   blob?: Blob;
   previewText?: string;
   originalSizeBytes?: number;
+  originalBlob?: Blob;
 }
 
 interface FilePreviewModalProps {
   output?: ConversionOutput | null;
   target?: PreviewTarget | null;
   originalSizeBytes?: number;
+  originalBlob?: Blob;
   onClose: () => void;
 }
 
@@ -59,9 +63,10 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   output,
   target,
   originalSizeBytes,
+  originalBlob,
   onClose,
 }) => {
-  const { dict, showToast } = useApp();
+  const { dict, showToast, registerOverlay } = useApp();
 
   const item: PreviewTarget | null = useMemo(() => {
     if (target) return target;
@@ -74,12 +79,22 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
         blob: output.blob,
         previewText: output.previewText,
         originalSizeBytes,
+        originalBlob,
       };
     }
     return null;
-  }, [output, target, originalSizeBytes]);
+  }, [output, target, originalSizeBytes, originalBlob]);
+
+  // Hide BottomNav while Full-Screen Preview is active
+  useEffect(() => {
+    if (!item) return;
+    return registerOverlay();
+  }, [item, registerOverlay]);
 
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [originalImgUrl, setOriginalImgUrl] = useState<string | null>(null);
+  const [compareMode, setCompareMode] = useState(false);
+  const [splitPct, setSplitPct] = useState(50);
   const [imgDims, setImgDims] = useState<{ w: number; h: number } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pdfDarkStage, setPdfDarkStage] = useState(true);
@@ -113,9 +128,12 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   const isTextLike = Boolean(
     item && (item.previewText || item.mime.startsWith('text/') || TEXT_EXTENSIONS.has(ext)),
   );
+  const canCompareImage = Boolean(isImage && item?.originalBlob?.type?.startsWith('image/'));
 
   useEffect(() => {
     setZoom(1);
+    setCompareMode(false);
+    setSplitPct(50);
     setPdfPage(1);
     setPdfTotal(0);
     setPdfDataUrl(null);
@@ -135,6 +153,16 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     setObjectUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [item, isImage, isVideo, isAudio]);
+
+  useEffect(() => {
+    if (!canCompareImage || !item?.originalBlob) {
+      setOriginalImgUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(item.originalBlob);
+    setOriginalImgUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [canCompareImage, item]);
 
   useEffect(() => {
     if (!isPdf || !item?.blob) return;
@@ -232,7 +260,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     }
   };
 
-  return (
+  const modalContent = (
     <div
       className="fullscreen-view fullscreen-view--preview"
       role="dialog"
@@ -257,7 +285,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
               className="truncate"
               style={{ fontWeight: 700, fontSize: '0.96rem', color: 'var(--text-primary)' }}
             >
-              {middleTruncate(item.fileName, 28)}
+              {middleTruncate(item.fileName, 26)}
             </div>
             <div
               className="truncate tabular"
@@ -277,6 +305,20 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {canCompareImage && (
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setCompareMode((v) => !v)}
+                aria-label="Compare before and after"
+                style={{
+                  background: compareMode ? 'var(--accent-soft)' : 'var(--bg-fill)',
+                  color: compareMode ? 'var(--accent)' : 'var(--text-primary)',
+                }}
+              >
+                <Columns2 size={18} />
+              </button>
+            )}
             {isPdf && (
               <button
                 type="button"
@@ -340,27 +382,113 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             justifyContent: isImage || isVideo || isAudio ? 'center' : 'flex-start',
           }}
         >
-          {/* Image Full-Screen Viewer */}
-          {isImage && objectUrl && (
-            <img
-              src={objectUrl}
-              alt={item.fileName}
-              onLoad={(e) =>
-                setImgDims({
-                  w: e.currentTarget.naturalWidth,
-                  h: e.currentTarget.naturalHeight,
-                })
-              }
-              style={{
-                width: zoom === 1 ? 'auto' : `${Math.round(zoom * 100)}%`,
-                maxWidth: zoom <= 1 ? '100%' : 'none',
-                maxHeight: zoom <= 1 ? '72dvh' : 'none',
-                height: 'auto',
-                objectFit: 'contain',
-                borderRadius: 12,
-                boxShadow: '0 8px 30px rgba(0,0,0,0.28)',
-              }}
-            />
+          {/* Image Full-Screen Viewer (with Optional Interactive Before/After Split Comparison!) */}
+          {isImage && objectUrl && compareMode && originalImgUrl ? (
+            <div style={{ width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  boxShadow: '0 8px 30px rgba(0,0,0,0.28)',
+                }}
+              >
+                <img
+                  src={objectUrl}
+                  alt={item.fileName}
+                  style={{ width: '100%', maxHeight: '62dvh', objectFit: 'contain', display: 'block' }}
+                />
+                <img
+                  src={originalImgUrl}
+                  alt="Original"
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    clipPath: `inset(0 ${100 - splitPct}% 0 0)`,
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: `${splitPct}%`,
+                    width: 2,
+                    background: '#FFFFFF',
+                    boxShadow: '0 0 8px rgba(0,0,0,0.6)',
+                    pointerEvents: 'none',
+                  }}
+                />
+                <span
+                  className="tabular"
+                  style={{
+                    position: 'absolute',
+                    top: 10,
+                    left: 10,
+                    padding: '4px 9px',
+                    borderRadius: 8,
+                    background: 'rgba(0,0,0,0.68)',
+                    color: '#FFFFFF',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  Orijinal · {formatFileSize(item.originalSizeBytes ?? item.originalBlob!.size)}
+                </span>
+                <span
+                  className="tabular"
+                  style={{
+                    position: 'absolute',
+                    top: 10,
+                    right: 10,
+                    padding: '4px 9px',
+                    borderRadius: 8,
+                    background: 'rgba(10,132,255,0.88)',
+                    color: '#FFFFFF',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  Yeni · {formatFileSize(item.sizeBytes)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={5}
+                max={95}
+                value={splitPct}
+                onChange={(e) => setSplitPct(Number(e.target.value))}
+                aria-label="Before and after split slider"
+                style={{ width: '100%', accentColor: 'var(--accent)' }}
+              />
+            </div>
+          ) : (
+            isImage &&
+            objectUrl && (
+              <img
+                src={objectUrl}
+                alt={item.fileName}
+                onLoad={(e) =>
+                  setImgDims({
+                    w: e.currentTarget.naturalWidth,
+                    h: e.currentTarget.naturalHeight,
+                  })
+                }
+                style={{
+                  width: zoom === 1 ? 'auto' : `${Math.round(zoom * 100)}%`,
+                  maxWidth: zoom <= 1 ? '100%' : 'none',
+                  maxHeight: zoom <= 1 ? '72dvh' : 'none',
+                  height: 'auto',
+                  objectFit: 'contain',
+                  borderRadius: 12,
+                  boxShadow: '0 8px 30px rgba(0,0,0,0.28)',
+                }}
+              />
+            )
           )}
 
           {/* Video Full-Screen Inline Player */}
@@ -481,7 +609,6 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
       {/* 3. Spacious Docked Bottom Controls & Actions Bar (44px+ Tap Targets, >=12px Spacing) */}
       <footer className="fullscreen-footer">
         <div className="fullscreen-footer-inner">
-          {/* PDF Page Navigator + Zoom Controls */}
           {isPdf && pdfTotal > 0 && (
             <div
               style={{
@@ -545,8 +672,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             </div>
           )}
 
-          {/* Image Zoom Controls */}
-          {isImage && objectUrl && (
+          {isImage && objectUrl && !compareMode && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
               <button
                 type="button"
@@ -572,7 +698,6 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             </div>
           )}
 
-          {/* Native iOS QuickLook Full-Screen Button */}
           {isNativeIos() && item.blob && (
             <button
               type="button"
@@ -585,7 +710,6 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             </button>
           )}
 
-          {/* Primary Share & Save Actions */}
           {item.blob && (
             <div className="grid-2">
               <button
@@ -610,4 +734,6 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
       </footer>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

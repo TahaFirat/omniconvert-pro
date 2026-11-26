@@ -2,7 +2,7 @@ export const APP_CONFIG = {
   appName: 'OmniConvert',
   bundleId: 'com.omniconvert.app',
   appGroupId: 'group.com.omniconvert.app',
-  version: '1.0.0',
+  version: '1.1.0',
   cloudApiBaseUrl: import.meta.env.VITE_CLOUD_API_URL || '',
   cloudWorkerEnabled: Boolean(import.meta.env.VITE_CLOUD_API_URL),
   privacyPolicyUrl: 'https://tahafirat.github.io/omniconvert-pro/privacy.html',

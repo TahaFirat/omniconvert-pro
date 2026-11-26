@@ -3,7 +3,9 @@ import { ArrowLeftRight, Clock, Layers, Settings } from 'lucide-react';
 import { useApp, type ActiveTab } from '../../application/AppContext';
 
 export const BottomNav: React.FC = () => {
-  const { activeTab, setActiveTab, activeJobsCount, dict } = useApp();
+  const { activeTab, setActiveTab, activeJobsCount, hasFullscreenOverlay, dict } = useApp();
+
+  if (hasFullscreenOverlay) return null;
 
   const items: Array<{ id: ActiveTab; label: string; icon: (active: boolean) => React.ReactNode; badge?: number }> = [
     {

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowDown,
   ArrowRight,
@@ -56,7 +57,11 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
     moveSelectedInput,
     enqueueAndRun,
     saveCustomPreset,
+    registerOverlay,
   } = useApp();
+
+  // Hide BottomNav & portal directly into document.body so iOS WKWebView NEVER overlaps header/footer!
+  useEffect(() => registerOverlay(), [registerOverlay]);
 
   const toolSpec = getGuidedTool(toolId);
   const toolCopy = toolSpec ? dict.tools[toolSpec.copyKey] : null;
@@ -164,9 +169,17 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
   }, [query, reachableTargets]);
 
   const recommended = useMemo(
-    () => filteredTargets.filter((t) => t.isPopular).slice(0, 6),
+    () => filteredTargets.filter((t) => t.isPopular && t.plan.steps.length === 1).slice(0, 6),
     [filteredTargets],
   );
+
+  // Deduplicated secondary formats: exclude already-shown Recommended cards & hide noisy multi-hop formats unless searching!
+  const otherFormats = useMemo(() => {
+    const q = query.trim();
+    if (q) return filteredTargets;
+    const recIds = new Set(recommended.map((r) => r.format.id));
+    return filteredTargets.filter((t) => !recIds.has(t.format.id) && t.plan.steps.length === 1);
+  }, [filteredTargets, recommended, query]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const list = e.target.files ? Array.from(e.target.files) : [];
@@ -273,7 +286,7 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
     return toolCopy?.cta ?? dict.targetPicker.startConversion;
   })();
 
-  return (
+  const workspaceView = (
     <div
       className="fullscreen-view"
       role="dialog"
@@ -712,15 +725,13 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
                 </div>
               )}
 
-              <div>
-                <div className="section-header">{dict.targetPicker.allMatching}</div>
-                {filteredTargets.length === 0 ? (
-                  <div style={{ fontSize: '0.88rem', color: 'var(--text-muted)', padding: '8px 4px' }}>
-                    {dict.targetPicker.noResults}
+              {otherFormats.length > 0 && (
+                <div>
+                  <div className="section-header">
+                    {query.trim() ? dict.targetPicker.allMatching : dict.targetPicker.allMatching}
                   </div>
-                ) : (
                   <div className="grid-3">
-                    {filteredTargets.map(({ format, plan }) => {
+                    {otherFormats.map(({ format, plan }) => {
                       const selected = format.id === effectiveTarget;
                       const locked = plan.blockedByOfflineLock && !allowTempCloud;
                       const needsPro = isProFeatureJob(plan, options, selectedInputs.length);
@@ -764,8 +775,14 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
                       );
                     })}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+
+              {filteredTargets.length === 0 && (
+                <div style={{ fontSize: '0.88rem', color: 'var(--text-muted)', padding: '8px 4px' }}>
+                  {dict.targetPicker.noResults}
+                </div>
+              )}
             </section>
           )}
 
@@ -850,6 +867,31 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
                   ariaLabel={dict.targetPicker.stripExif}
                 />
               </div>
+
+              {effectiveTarget === 'pdf' && (
+                <div>
+                  <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                    Sayfa Boyutu
+                  </div>
+                  <div className="ios-segmented">
+                    {(
+                      [
+                        ['fit', 'Görsele Sığdır'],
+                        ['a4', 'A4 Otomatik'],
+                      ] as const
+                    ).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        className={`ios-segmented-btn${(options.pdfPageFit ?? 'fit') === mode ? ' is-active' : ''}`}
+                        onClick={() => setOptions((prev) => ({ ...prev, pdfPageFit: mode }))}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1133,4 +1175,6 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
       <FilePreviewModal target={previewItem} onClose={() => setPreviewItem(null)} />
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(workspaceView, document.body) : workspaceView;
 };

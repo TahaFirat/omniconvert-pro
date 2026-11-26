@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 import PDFKit
 import Vision
 import AVFoundation
+import CoreText
 import QuickLook
 
 private final class OmniQuickLookCoordinator: NSObject, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
@@ -44,6 +45,7 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "convertMedia", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "videoToGif", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pdfToImages", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "textToVectorPdf", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "renderPdfPreviewPage", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openQuickLook", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "cleanupTempWorkspace", returnType: CAPPluginReturnPromise),
@@ -184,8 +186,36 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
                 return
             }
 
+            var renderImage = decoded
+            // Flatten alpha onto white when exporting transparent PNG/TIFF/HEIC to opaque JPEG
+            if utType == .jpeg {
+                let alpha = decoded.alphaInfo
+                if alpha == .first || alpha == .last || alpha == .premultipliedFirst || alpha == .premultipliedLast {
+                    let w = decoded.width
+                    let h = decoded.height
+                    let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+                    if let ctx = CGContext(
+                        data: nil,
+                        width: w,
+                        height: h,
+                        bitsPerComponent: 8,
+                        bytesPerRow: 0,
+                        space: colorSpace,
+                        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+                    ) {
+                        ctx.setFillColor(UIColor.white.cgColor)
+                        ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+                        ctx.draw(decoded, in: CGRect(x: 0, y: 0, width: w, height: h))
+                        if let flattened = ctx.makeImage() {
+                            renderImage = flattened
+                        }
+                    }
+                }
+            }
+
             var props: [CFString: Any] = [
-                kCGImageDestinationLossyCompressionQuality: Double(quality) / 100.0
+                kCGImageDestinationLossyCompressionQuality: Double(quality) / 100.0,
+                kCGImageDestinationOptimizeColorForSharing: true
             ]
             if stripExif {
                 props[kCGImagePropertyExifDictionary] = kCFNull
@@ -195,7 +225,7 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
                 props[kCGImagePropertyOrientation] = 1
             }
 
-            CGImageDestinationAddImage(destination, decoded, props as CFDictionary)
+            CGImageDestinationAddImage(destination, renderImage, props as CFDictionary)
             guard CGImageDestinationFinalize(destination) else {
                 call.reject("ImageIO failed to finalize encoded output")
                 return
@@ -341,6 +371,61 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// Tier 1 Native Vector UTF-8 PDF Renderer (CoreText / UIGraphicsPDFRenderer)
+    /// Produces crisp, 100% searchable Turkish/Unicode vector PDFs (~15 KB/page instead of bloated PNG pages).
+    @objc public func textToVectorPdf(_ call: CAPPluginCall) {
+        let text = call.getString("text") ?? ""
+        DispatchQueue.global(qos: .userInitiated).async {
+            let pageRect = CGRect(x: 0, y: 0, width: 595.28, height: 841.89)
+            let margin: CGFloat = 46.0
+            let textRect = pageRect.insetBy(dx: margin, dy: margin)
+
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineSpacing = 4.0
+            paragraph.lineBreakMode = .byWordWrapping
+
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 11.5),
+                .foregroundColor: UIColor(red: 0.08, green: 0.1, blue: 0.14, alpha: 1.0),
+                .paragraphStyle: paragraph
+            ]
+            let attributed = NSAttributedString(string: text.isEmpty ? " " : text, attributes: attrs)
+            let framesetter = CTFramesetterCreateWithAttributedString(attributed as CFAttributedString)
+
+            let renderer = UIGraphicsPDFRenderer(bounds: pageRect)
+            let data = renderer.pdfData { ctx in
+                var currentRange = CFRange(location: 0, length: 0)
+                let totalLen = attributed.length
+                var pageSafety = 0
+                while currentRange.location < totalLen && pageSafety < 200 {
+                    pageSafety += 1
+                    ctx.beginPage()
+                    let cg = ctx.cgContext
+                    cg.saveGState()
+                    cg.textMatrix = .identity
+                    cg.translateBy(x: 0, y: pageRect.height)
+                    cg.scaleBy(x: 1.0, y: -1.0)
+
+                    let flippedRect = CGRect(x: margin, y: margin, width: textRect.width, height: textRect.height)
+                    let path = CGPath(rect: flippedRect, transform: nil)
+                    let frame = CTFramesetterCreateFrame(framesetter, currentRange, path, nil)
+                    CTFrameDraw(frame, cg)
+                    cg.restoreGState()
+
+                    let visible = CTFrameGetVisibleStringRange(frame)
+                    if visible.length <= 0 { break }
+                    currentRange = CFRange(location: currentRange.location + visible.length, length: 0)
+                }
+            }
+
+            call.resolve([
+                "base64Data": data.base64EncodedString(),
+                "mime": "application/pdf",
+                "sizeBytes": data.count
+            ])
+        }
+    }
+
     /// Tier 1 Hardware PDFKit Page Rendering (PDF -> PNG/JPG)
     @objc public func pdfToImages(_ call: CAPPluginCall) {
         guard let base64 = call.getString("base64Data"),
@@ -409,6 +494,18 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
 
+        // Anti-upscale guard: never inflate a 480p/720p video to 1080p
+        var effectiveRes = resolution
+        if let videoTrack = asset.tracks(withMediaType: .video).first {
+            let transformed = videoTrack.naturalSize.applying(videoTrack.preferredTransform)
+            let srcMax = max(abs(transformed.width), abs(transformed.height))
+            if effectiveRes == "1080p" && srcMax > 0 && srcMax <= 1280 {
+                effectiveRes = srcMax <= 640 ? "480p" : "720p"
+            } else if effectiveRes == "720p" && srcMax > 0 && srcMax <= 640 {
+                effectiveRes = "480p"
+            }
+        }
+
         let preset: String
         let fileType: AVFileType
         let mime: String
@@ -422,11 +519,11 @@ public class OmniNativeEnginePlugin: CAPPlugin, CAPBridgedPlugin {
             fileType = .m4a
             mime = "audio/x-m4r"
         case "mov":
-            preset = resolution == "1080p" ? AVAssetExportPreset1920x1080 : (resolution == "480p" ? AVAssetExportPreset640x480 : AVAssetExportPreset1280x720)
+            preset = effectiveRes == "1080p" ? AVAssetExportPreset1920x1080 : (effectiveRes == "480p" ? AVAssetExportPreset640x480 : AVAssetExportPreset1280x720)
             fileType = .mov
             mime = "video/quicktime"
         default:
-            preset = resolution == "1080p" ? AVAssetExportPreset1920x1080 : (resolution == "480p" ? AVAssetExportPreset640x480 : AVAssetExportPreset1280x720)
+            preset = effectiveRes == "1080p" ? AVAssetExportPreset1920x1080 : (effectiveRes == "480p" ? AVAssetExportPreset640x480 : AVAssetExportPreset1280x720)
             fileType = .mp4
             mime = "video/mp4"
         }

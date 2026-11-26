@@ -60,6 +60,7 @@ export interface OmniNativeEnginePlugin {
   convertMedia(options: NativeMediaParams): Promise<NativeMediaResult>;
   videoToGif(options: { inputPath: string; fps?: number; maxDurationSec?: number; maxDimension?: number }): Promise<NativeBinaryResult>;
   pdfToImages(options: { base64Data: string; targetFormat: string; dpi: number }): Promise<NativeBinaryResult>;
+  textToVectorPdf(options: { text: string }): Promise<NativeBinaryResult>;
   renderPdfPreviewPage(options: { base64Data: string; pageNumber: number; maxWidth?: number }): Promise<NativePdfPreviewPageResult>;
   openQuickLook(options: { base64Data: string; fileName: string }): Promise<{ presented: boolean }>;
   cleanupTempWorkspace(): Promise<{ cleanedBytes: number; removedDirs: number }>;

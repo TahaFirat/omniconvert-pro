@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, X } from 'lucide-react';
 import { useApp } from '../../application/AppContext';
 import { APP_CONFIG, MONETIZATION_CONFIG } from '../../core/constants';
@@ -36,7 +37,7 @@ export const PaywallModal: React.FC = () => {
     }
   };
 
-  return (
+  const modal = (
     <div
       className="modal-backdrop"
       role="dialog"
@@ -182,4 +183,6 @@ export const PaywallModal: React.FC = () => {
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modal, document.body) : modal;
 };

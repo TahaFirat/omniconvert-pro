@@ -38,6 +38,7 @@ export const QueueScreen: React.FC = () => {
   const [previewState, setPreviewState] = useState<{
     output: ConversionOutput;
     originalBytes: number;
+    originalBlob: Blob;
   } | null>(null);
   const completedCount = jobs.filter((j) => j.status === 'completed' && j.output?.blob).length;
 
@@ -167,6 +168,7 @@ export const QueueScreen: React.FC = () => {
                         setPreviewState({
                           output: job.output!,
                           originalBytes: job.file.size,
+                          originalBlob: job.file,
                         })
                       }
                     >
@@ -206,6 +208,7 @@ export const QueueScreen: React.FC = () => {
       <FilePreviewModal
         output={previewState?.output ?? null}
         originalSizeBytes={previewState?.originalBytes}
+        originalBlob={previewState?.originalBlob}
         onClose={() => setPreviewState(null)}
       />
     </div>

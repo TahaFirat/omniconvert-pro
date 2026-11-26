@@ -6,6 +6,10 @@ import {
   OmniNativeEngine,
   uint8ToBase64,
 } from '../native/omniNativeBridge';
+import {
+  stripJpegMetadataLossless,
+  stripPngMetadataLossless,
+} from './losslessMetadataStripper';
 
 function encodeBmpFromRgba(rgba: Uint8ClampedArray, width: number, height: number): Uint8Array {
   const rowStride = Math.ceil((width * 3) / 4) * 4;
@@ -15,18 +19,16 @@ function encodeBmpFromRgba(rgba: Uint8ClampedArray, width: number, height: numbe
   const view = new DataView(buf);
   const bytes = new Uint8Array(buf);
 
-  // BITMAPFILEHEADER (14 bytes)
-  view.setUint8(0, 0x42); // B
-  view.setUint8(1, 0x4d); // M
+  view.setUint8(0, 0x42);
+  view.setUint8(1, 0x4d);
   view.setUint32(2, fileSize, true);
   view.setUint32(10, 54, true);
 
-  // BITMAPINFOHEADER (40 bytes)
   view.setUint32(14, 40, true);
   view.setInt32(18, width, true);
-  view.setInt32(22, height, true); // bottom-up
+  view.setInt32(22, height, true);
   view.setUint16(26, 1, true);
-  view.setUint16(28, 24, true); // 24-bit RGB
+  view.setUint16(28, 24, true);
   view.setUint32(34, pixelArraySize, true);
 
   for (let y = 0; y < height; y++) {
@@ -35,9 +37,9 @@ function encodeBmpFromRgba(rgba: Uint8ClampedArray, width: number, height: numbe
     for (let x = 0; x < width; x++) {
       const srcIdx = (srcY * width + x) * 4;
       const dstIdx = dstRow + x * 3;
-      bytes[dstIdx] = rgba[srcIdx + 2]; // B
-      bytes[dstIdx + 1] = rgba[srcIdx + 1]; // G
-      bytes[dstIdx + 2] = rgba[srcIdx]; // R
+      bytes[dstIdx] = rgba[srcIdx + 2];
+      bytes[dstIdx + 1] = rgba[srcIdx + 1];
+      bytes[dstIdx + 2] = rgba[srcIdx];
     }
   }
   return bytes;
@@ -47,9 +49,9 @@ function wrapPngAsIco(pngBytes: Uint8Array, width: number, height: number): Uint
   const headerSize = 6 + 16;
   const out = new Uint8Array(headerSize + pngBytes.length);
   const view = new DataView(out.buffer);
-  view.setUint16(0, 0, true); // reserved
-  view.setUint16(2, 1, true); // icon type
-  view.setUint16(4, 1, true); // count = 1
+  view.setUint16(0, 0, true);
+  view.setUint16(2, 1, true);
+  view.setUint16(4, 1, true);
   view.setUint8(6, width >= 256 ? 0 : width);
   view.setUint8(7, height >= 256 ? 0 : height);
   view.setUint8(8, 0);
@@ -76,51 +78,91 @@ async function loadImageElement(blob: Blob): Promise<HTMLImageElement> {
   }
 }
 
+function copyToBlob(bytes: Uint8Array, mime: string): Blob {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return new Blob([copy], { type: mime });
+}
+
 export async function convertImageLocally(
   inputBlob: Blob,
   sourceFormat: string,
   targetFormat: string,
   options: ConversionOptions,
 ): Promise<{ blob: Blob; mime: string }> {
-  // Tier 1 Native iOS ImageIO / CoreImage path for HEIC, RAW, TIFF, or hardware JPEG/PNG/WebP
-  const nativePreferred = ['heic', 'heif', 'dng', 'cr2', 'nef', 'arw', 'tiff'].includes(sourceFormat) || targetFormat === 'heic';
-  if (isNativeIos() && (nativePreferred || ['jpg', 'png', 'webp'].includes(targetFormat))) {
+  const src = sourceFormat.toLowerCase();
+  const dst = targetFormat.toLowerCase();
+
+  // FAST LOSSLESS PASSTHROUGH: Avoid generation loss & 3x-5x Canvas bloat on same-format EXIF-strip!
+  if (!options.maxDimension) {
+    if (src === 'png' && dst === 'png') {
+      const raw = new Uint8Array(await inputBlob.arrayBuffer());
+      const cleaned = options.stripExif ? stripPngMetadataLossless(raw) : raw;
+      return { blob: copyToBlob(cleaned, 'image/png'), mime: 'image/png' };
+    }
+    if ((src === 'jpg' || src === 'jpeg') && (dst === 'jpg' || dst === 'jpeg') && options.quality >= 85) {
+      const raw = new Uint8Array(await inputBlob.arrayBuffer());
+      const res = options.stripExif
+        ? stripJpegMetadataLossless(raw)
+        : { bytes: raw, orientation: 1, strippedSegments: 0 };
+      if (res.orientation === 1) {
+        return { blob: copyToBlob(res.bytes, 'image/jpeg'), mime: 'image/jpeg' };
+      }
+    }
+  }
+
+  // Tier 1 Native iOS ImageIO / CoreImage path (HEIC, RAW, TIFF, and hardware JPEG/PNG/WebP)
+  const nativePreferred =
+    ['heic', 'heif', 'dng', 'cr2', 'nef', 'arw', 'tiff'].includes(src) || dst === 'heic';
+  if (isNativeIos() && (nativePreferred || ['jpg', 'png', 'webp'].includes(dst))) {
     try {
       const bytes = new Uint8Array(await inputBlob.arrayBuffer());
       const base64Data = await uint8ToBase64(bytes);
       const res = await OmniNativeEngine.convertImage({
         base64Data,
-        sourceFormat,
-        targetFormat,
+        sourceFormat: src,
+        targetFormat: dst,
         quality: options.quality,
         maxDimension: options.maxDimension,
         stripExif: options.stripExif,
       });
       const outBytes = base64ToUint8(res.base64Data);
-      const copy = new Uint8Array(outBytes.byteLength);
-      copy.set(outBytes);
-      return { blob: new Blob([copy], { type: res.mime }), mime: res.mime };
+
+      // Strict Never-Bloat Guard for same-format optimization
+      if (src === dst && !options.maxDimension && outBytes.byteLength >= bytes.byteLength) {
+        if (src === 'jpg') {
+          const stripped = options.stripExif ? stripJpegMetadataLossless(bytes) : { bytes, orientation: 1 };
+          if (stripped.orientation === 1 && stripped.bytes.byteLength <= outBytes.byteLength) {
+            return { blob: copyToBlob(stripped.bytes, 'image/jpeg'), mime: 'image/jpeg' };
+          }
+        }
+        if (src === 'png') {
+          const stripped = options.stripExif ? stripPngMetadataLossless(bytes) : bytes;
+          return { blob: copyToBlob(stripped, 'image/png'), mime: 'image/png' };
+        }
+      }
+
+      return { blob: copyToBlob(outBytes, res.mime), mime: res.mime };
     } catch {
       if (nativePreferred) {
         throw new OmniError(
           'IOS_IMAGEIO_FAILED',
-          `Native iOS ImageIO failed to convert ${sourceFormat.toUpperCase()} -> ${targetFormat.toUpperCase()}.`,
+          `Native iOS ImageIO failed to convert ${src.toUpperCase()} -> ${dst.toUpperCase()}.`,
         );
       }
-      // Fall through to local canvas engine for standard formats
     }
   }
 
   if (nativePreferred && !isNativeIos()) {
     throw new OmniError(
       'NATIVE_IOS_REQUIRED',
-      `${sourceFormat.toUpperCase()} hardware decoding runs via iOS ImageIO on device (Tier 1).`,
+      `${src.toUpperCase()} hardware decoding runs via iOS ImageIO on device.`,
     );
   }
 
-  // Tier 2 On-Device Canvas Rasterizer & Encoder (automatically strips EXIF/GPS metadata!)
+  // Tier 2 On-Device Canvas Rasterizer & Encoder (strict anti-upscale + Never-Bloat guard!)
   const sourceBlob =
-    sourceFormat === 'svg'
+    src === 'svg'
       ? new Blob([await inputBlob.text()], { type: 'image/svg+xml;charset=utf-8' })
       : inputBlob;
 
@@ -128,12 +170,13 @@ export async function convertImageLocally(
   let targetW = img.naturalWidth || img.width || 512;
   let targetH = img.naturalHeight || img.height || 512;
 
-  if (targetFormat === 'ico') {
+  if (dst === 'ico') {
     const cap = Math.min(options.maxDimension ?? 256, 256);
     const scale = Math.min(1, cap / Math.max(targetW, targetH));
     targetW = Math.max(16, Math.round(targetW * scale));
     targetH = Math.max(16, Math.round(targetH * scale));
   } else if (options.maxDimension && Math.max(targetW, targetH) > options.maxDimension) {
+    // Anti-upscale guard: strictly only shrink when larger than maxDimension
     const scale = options.maxDimension / Math.max(targetW, targetH);
     targetW = Math.max(1, Math.round(targetW * scale));
     targetH = Math.max(1, Math.round(targetH * scale));
@@ -147,44 +190,64 @@ export async function convertImageLocally(
     throw new OmniError('CANVAS_UNAVAILABLE', '2D graphics context is unavailable.');
   }
 
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
   // White background when flattening transparency to opaque JPEG/BMP
-  if (targetFormat === 'jpg' || targetFormat === 'bmp') {
+  if (dst === 'jpg' || dst === 'jpeg' || dst === 'bmp') {
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, targetW, targetH);
   }
   ctx.drawImage(img, 0, 0, targetW, targetH);
 
-  if (targetFormat === 'bmp') {
+  if (dst === 'bmp') {
     const imgData = ctx.getImageData(0, 0, targetW, targetH);
     const bmp = encodeBmpFromRgba(imgData.data, targetW, targetH);
-    const copy = new Uint8Array(bmp.byteLength);
-    copy.set(bmp);
-    return { blob: new Blob([copy], { type: 'image/bmp' }), mime: 'image/bmp' };
+    return { blob: copyToBlob(bmp, 'image/bmp'), mime: 'image/bmp' };
   }
 
   const mimeMap: Record<string, string> = {
     png: 'image/png',
     jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
     webp: 'image/webp',
     ico: 'image/png',
   };
-  const canvasMime = mimeMap[targetFormat] ?? 'image/png';
+  const canvasMime = mimeMap[dst] ?? 'image/png';
   const qualityFloat = Math.max(0.1, Math.min(1, options.quality / 100));
 
-  const encodedBlob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new OmniError('IMAGE_ENCODE_ERROR', 'Failed to encode image output.'))),
-      canvasMime,
-      canvasMime === 'image/png' ? undefined : qualityFloat,
-    );
-  });
+  const encodeCanvas = (q?: number) =>
+    new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new OmniError('IMAGE_ENCODE_ERROR', 'Failed to encode image output.'))),
+        canvasMime,
+        canvasMime === 'image/png' ? undefined : q,
+      );
+    });
 
-  if (targetFormat === 'ico') {
+  let encodedBlob = await encodeCanvas(qualityFloat);
+
+  // Never-Bloat Guard for lossy same-format compression (e.g. already-compressed JPG -> JPG)
+  if ((src === 'jpg' || src === 'jpeg' || src === 'webp') && src === dst && !options.maxDimension) {
+    if (encodedBlob.size >= inputBlob.size && qualityFloat > 0.55) {
+      const stepped = await encodeCanvas(Math.max(0.5, qualityFloat - 0.14));
+      if (stepped.size < encodedBlob.size) {
+        encodedBlob = stepped;
+      }
+    }
+    if (encodedBlob.size >= inputBlob.size && src === 'jpg') {
+      const raw = new Uint8Array(await inputBlob.arrayBuffer());
+      const stripped = options.stripExif ? stripJpegMetadataLossless(raw) : { bytes: raw, orientation: 1 };
+      if (stripped.orientation === 1 && stripped.bytes.byteLength < encodedBlob.size) {
+        return { blob: copyToBlob(stripped.bytes, 'image/jpeg'), mime: 'image/jpeg' };
+      }
+    }
+  }
+
+  if (dst === 'ico') {
     const pngBytes = new Uint8Array(await encodedBlob.arrayBuffer());
     const icoBytes = wrapPngAsIco(pngBytes, targetW, targetH);
-    const copy = new Uint8Array(icoBytes.byteLength);
-    copy.set(icoBytes);
-    return { blob: new Blob([copy], { type: 'image/x-icon' }), mime: 'image/x-icon' };
+    return { blob: copyToBlob(icoBytes, 'image/x-icon'), mime: 'image/x-icon' };
   }
 
   return { blob: encodedBlob, mime: canvasMime };

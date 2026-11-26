@@ -75,6 +75,8 @@ export interface SelectedInputItem {
 interface AppContextValue {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
+  hasFullscreenOverlay: boolean;
+  registerOverlay: () => () => void;
   toastMessage: string | null;
   showToast: (msg: string) => void;
   paywallOpen: boolean;
@@ -181,6 +183,11 @@ function revokeThumb(item: SelectedInputItem): void {
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('convert');
+  const [overlayCount, setOverlayCount] = useState(0);
+  const registerOverlay = useCallback(() => {
+    setOverlayCount((c) => c + 1);
+    return () => setOverlayCount((c) => Math.max(0, c - 1));
+  }, []);
   const [settings, setSettings] = useState<PersistedSettings>(() =>
     localDb.loadSettings(detectDefaultLocale()),
   );
@@ -873,6 +880,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const value: AppContextValue = {
     activeTab,
     setActiveTab,
+    hasFullscreenOverlay: overlayCount > 0,
+    registerOverlay,
     toastMessage,
     showToast,
     paywallOpen,

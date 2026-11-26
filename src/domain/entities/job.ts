@@ -8,6 +8,7 @@ export interface ConversionOptions {
   password?: string;
   ocrLanguage: 'tr' | 'en' | 'de' | 'es';
   mergeIntoSinglePdf?: boolean;
+  pdfPageFit?: 'fit' | 'a4';
   pdfPageRange?: string; // e.g. "1-3, 5"
   pdfRotateDegrees?: 0 | 90 | 180 | 270;
   videoResolution?: '1080p' | '720p' | '480p';
@@ -21,6 +22,7 @@ export const DEFAULT_CONVERSION_OPTIONS: ConversionOptions = {
   ocrLanguage: 'tr',
   dpi: 150,
   mergeIntoSinglePdf: false,
+  pdfPageFit: 'fit',
   pdfRotateDegrees: 0,
   videoResolution: '720p',
   ringtoneDurationSec: 30,

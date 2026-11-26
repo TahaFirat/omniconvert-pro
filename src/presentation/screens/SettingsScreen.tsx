@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronRight, X } from 'lucide-react';
 import { useApp } from '../../application/AppContext';
 import { getRemainingDailyProTrials } from '../../application/billingService';
@@ -287,49 +288,51 @@ export const SettingsScreen: React.FC = () => {
         </div>
       </section>
 
-      {licensesOpen && (
-        <div
-          className="modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-label={dict.settings.openSourceLicenses}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setLicensesOpen(false);
-          }}
-        >
-          <div className="modal-sheet">
-            <div className="modal-sheet-header">
-              <div className="sheet-grabber" />
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <h2 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {dict.settings.openSourceLicenses}
-                </h2>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  onClick={() => setLicensesOpen(false)}
-                  aria-label={dict.paywall.close}
-                >
-                  <X size={19} />
-                </button>
+      {licensesOpen &&
+        createPortal(
+          <div
+            className="modal-backdrop"
+            role="dialog"
+            aria-modal="true"
+            aria-label={dict.settings.openSourceLicenses}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setLicensesOpen(false);
+            }}
+          >
+            <div className="modal-sheet">
+              <div className="modal-sheet-header">
+                <div className="sheet-grabber" />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <h2 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {dict.settings.openSourceLicenses}
+                  </h2>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => setLicensesOpen(false)}
+                    aria-label={dict.paywall.close}
+                  >
+                    <X size={19} />
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="modal-sheet-body">
-              <div className="ios-group" style={{ background: 'var(--sheet-card)' }}>
-                {OPEN_SOURCE_NOTICES.map((item) => (
-                  <div key={item.name} className="ios-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: 8 }}>
-                      <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{item.name}</span>
-                      <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', flexShrink: 0 }}>{item.license}</span>
+              <div className="modal-sheet-body">
+                <div className="ios-group" style={{ background: 'var(--sheet-card)' }}>
+                  {OPEN_SOURCE_NOTICES.map((item) => (
+                    <div key={item.name} className="ios-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: 8 }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{item.name}</span>
+                        <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', flexShrink: 0 }}>{item.license}</span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>{item.purpose}</div>
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>{item.purpose}</div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };
