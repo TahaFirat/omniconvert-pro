@@ -6,6 +6,7 @@ class MainViewController: CAPBridgeViewController {
     private static let lightBg = UIColor(red: 0.949, green: 0.949, blue: 0.969, alpha: 1.0) // #F2F2F7
     private static let darkBg = UIColor(red: 0.035, green: 0.035, blue: 0.043, alpha: 1.0)  // #09090B
     private static let amoledBg = UIColor.black
+    private var lastPushedInsets: UIEdgeInsets = .zero
 
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(OmniNativeEnginePlugin())
@@ -24,6 +25,23 @@ class MainViewController: CAPBridgeViewController {
     override open func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         configureScrollViewLock()
+        pushSafeAreaInsetsToWebView(force: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            self?.configureScrollViewLock()
+            self?.pushSafeAreaInsetsToWebView(force: true)
+        }
+    }
+
+    override open func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        configureScrollViewLock()
+        pushSafeAreaInsetsToWebView(force: false)
+    }
+
+    override open func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        configureScrollViewLock()
+        pushSafeAreaInsetsToWebView(force: true)
     }
 
     private func configureScrollViewLock() {
@@ -36,6 +54,29 @@ class MainViewController: CAPBridgeViewController {
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.showsVerticalScrollIndicator = false
         webView.scrollView.showsHorizontalScrollIndicator = false
+        if webView.scrollView.contentOffset != .zero {
+            webView.scrollView.setContentOffset(.zero, animated: false)
+        }
+    }
+
+    private func pushSafeAreaInsetsToWebView(force: Bool) {
+        guard let webView = self.webView else { return }
+        let insets = view.safeAreaInsets
+        if !force && !webView.isLoading && insets == lastPushedInsets { return }
+        if !webView.isLoading {
+            lastPushedInsets = insets
+        }
+        let js = """
+        (function(){
+          var r = document.documentElement;
+          if (!r) return;
+          r.style.setProperty('--native-safe-top', '\(Int(ceil(insets.top)))px');
+          r.style.setProperty('--native-safe-bottom', '\(Int(ceil(insets.bottom)))px');
+          r.style.setProperty('--native-safe-left', '\(Int(ceil(insets.left)))px');
+          r.style.setProperty('--native-safe-right', '\(Int(ceil(insets.right)))px');
+        })();
+        """
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
     private func applyBackground(_ color: UIColor) {

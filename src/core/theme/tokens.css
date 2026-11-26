@@ -3,10 +3,10 @@
 :root {
   color-scheme: light;
 
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-left: env(safe-area-inset-left, 0px);
-  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-top: max(env(safe-area-inset-top, 0px), var(--native-safe-top, 0px));
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--native-safe-bottom, 0px));
+  --safe-left: max(env(safe-area-inset-left, 0px), var(--native-safe-left, 0px));
+  --safe-right: max(env(safe-area-inset-right, 0px), var(--native-safe-right, 0px));
 
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', system-ui, sans-serif;
   --font-mono: 'SF Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -279,10 +279,27 @@ textarea {
   width: 100%;
   max-width: 720px;
   margin: 0 auto;
-  padding: 16px max(16px, var(--safe-right)) calc(120px + var(--safe-bottom)) max(16px, var(--safe-left));
+  padding: 16px max(16px, var(--safe-right)) 24px max(16px, var(--safe-left));
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.convert-dock {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 35;
+  width: 100%;
+  padding: 10px max(16px, var(--safe-right)) 6px max(16px, var(--safe-left));
+  background: var(--footer-glass);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-top: 0.5px solid var(--separator);
+}
+
+.convert-dock-inner {
+  max-width: 720px;
+  margin: 0 auto;
 }
 
 /* ZERO-SQUISH INVARIANT: direct children of vertical flex scroll stacks NEVER shrink or overlap */
@@ -308,6 +325,14 @@ textarea {
   overflow: hidden;
   background: var(--bg-app);
   color: var(--text-primary);
+}
+
+.fullscreen-view--flow {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  flex: 1 1 0%;
+  min-height: 0;
 }
 
 .fullscreen-view--preview {
@@ -360,7 +385,7 @@ textarea {
 .fullscreen-footer {
   flex-shrink: 0;
   z-index: 10;
-  padding: 12px max(16px, var(--safe-right)) calc(18px + var(--safe-bottom)) max(16px, var(--safe-left));
+  padding: 12px max(16px, var(--safe-right)) max(26px, calc(var(--safe-bottom) + 18px)) max(16px, var(--safe-left));
   background: var(--footer-glass);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
@@ -376,16 +401,15 @@ textarea {
 }
 
 /* ============================================================================
-   iOS 27 LIQUID GLASS FLOATING TAB BAR
+   iOS 27 LIQUID GLASS FLOATING TAB BAR (Dedicated Non-Overlapping Flex Row)
    ============================================================================ */
 .bottom-nav-wrap {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 50;
-  pointer-events: none;
-  padding: 0 max(14px, var(--safe-left)) calc(var(--safe-bottom) + 10px) max(14px, var(--safe-right));
+  flex-shrink: 0;
+  position: relative;
+  z-index: 40;
+  width: 100%;
+  padding: 8px max(14px, var(--safe-right)) max(16px, calc(var(--safe-bottom) + 10px)) max(14px, var(--safe-left));
+  background: var(--bg-app);
   display: flex;
   justify-content: center;
 }

@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { useApp, type SelectedInputItem } from '../../application/AppContext';
 import { interpolate } from '../../core/i18n';
-import type { ConversionOptions } from '../../domain/entities/job';
 import {
   GUIDED_TOOLS,
   type GuidedToolId,
@@ -27,7 +26,6 @@ import {
 import { readClipboardContent } from '../../infrastructure/native/omniNativeBridge';
 import { FilePreviewModal, type PreviewTarget } from '../components/FilePreviewModal';
 import { formatFileSize, middleTruncate } from '../components/formatBytes';
-import { ToolWorkspaceSheet } from './ToolWorkspaceSheet';
 
 function renderToolIcon(toolId: GuidedToolId) {
   switch (toolId) {
@@ -60,6 +58,7 @@ export const ConvertScreen: React.FC = () => {
     clearSelectedInputs,
     pendingPresetLaunch,
     consumePendingPresetLaunch,
+    openWorkspace,
     showToast,
   } = useApp();
 
@@ -68,22 +67,17 @@ export const ConvertScreen: React.FC = () => {
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   const [category, setCategory] = useState<ToolCategory>('all');
-  const [activeWorkspace, setActiveWorkspace] = useState<{
-    toolId: GuidedToolId;
-    target?: string;
-    options?: Partial<ConversionOptions>;
-  } | null>(null);
   const [previewItem, setPreviewItem] = useState<PreviewTarget | null>(null);
 
   useEffect(() => {
     if (!pendingPresetLaunch) return;
-    setActiveWorkspace({
+    openWorkspace({
       toolId: 'universal',
       target: pendingPresetLaunch.targetFormat,
       options: pendingPresetLaunch.options,
     });
     consumePendingPresetLaunch();
-  }, [pendingPresetLaunch, consumePendingPresetLaunch]);
+  }, [pendingPresetLaunch, consumePendingPresetLaunch, openWorkspace]);
 
   const visibleTools = useMemo(() => {
     if (category === 'all') return GUIDED_TOOLS;
@@ -449,18 +443,6 @@ export const ConvertScreen: React.FC = () => {
               </div>
             ))}
           </div>
-
-          <button
-            type="button"
-            className="btn btn-primary btn-lg"
-            data-testid="choose-target-btn"
-            style={{ width: '100%' }}
-            onClick={() => setActiveWorkspace({ toolId: 'universal' })}
-          >
-            {selectedInputs.length === 1
-              ? dict.convert.chooseTarget
-              : interpolate(dict.convert.convertCount, { count: selectedInputs.length })}
-          </button>
         </section>
       )}
 
@@ -490,7 +472,7 @@ export const ConvertScreen: React.FC = () => {
                 type="button"
                 data-testid={`tool-card-${tool.id}`}
                 className="tool-card"
-                onClick={() => setActiveWorkspace({ toolId: tool.id })}
+                onClick={() => openWorkspace({ toolId: tool.id })}
               >
                 <div
                   className="tool-icon-box"
@@ -525,15 +507,6 @@ export const ConvertScreen: React.FC = () => {
           })}
         </div>
       </section>
-
-      {activeWorkspace && (
-        <ToolWorkspaceSheet
-          toolId={activeWorkspace.toolId}
-          initialTarget={activeWorkspace.target}
-          initialOptions={activeWorkspace.options}
-          onClose={() => setActiveWorkspace(null)}
-        />
-      )}
 
       <FilePreviewModal target={previewItem} onClose={() => setPreviewItem(null)} />
     </div>

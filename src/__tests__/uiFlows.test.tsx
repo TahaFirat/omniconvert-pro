@@ -40,9 +40,14 @@ describe('OmniConvert Pro UI, PDF Merge, Preview & Store Compliance Flows', () =
     fireEvent.change(fileInput, { target: { files: [createSampleJsonFile()] } });
 
     const chooseBtn = await screen.findByTestId('choose-target-btn');
+    // Dock CTA sits cleanly outside scroll-viewport while BottomNav is visible
+    expect(screen.getByTestId('nav-convert')).toBeInTheDocument();
     fireEvent.click(chooseBtn);
 
     const yamlOpt = await screen.findByTestId('target-option-yaml');
+    // Inside ToolWorkspaceSheet, TopBar and BottomNav MUST NOT exist in the DOM at all
+    expect(screen.queryByTestId('nav-convert')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('offline-lock-toggle')).not.toBeInTheDocument();
     fireEvent.click(yamlOpt);
 
     const startBtn = screen.getByTestId('start-conversion-btn');

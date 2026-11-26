@@ -29,6 +29,7 @@ import {
   type ConversionOptions,
 } from '../domain/entities/job';
 import type { ConversionPreset } from '../domain/entities/preset';
+import type { GuidedToolId } from '../domain/tools/toolCatalog';
 import { conversionGraph } from '../domain/graph/conversionGraph';
 import { inspectFile } from '../domain/inspector/magicByteInspector';
 import { networkGuard } from '../infrastructure/cloud/networkGuard';
@@ -64,6 +65,12 @@ import { buildOutputFileName, runConversionJob } from './conversionOrchestrator'
 
 export type ActiveTab = 'convert' | 'queue' | 'history' | 'settings';
 
+export interface ActiveWorkspaceState {
+  toolId: GuidedToolId;
+  target?: string;
+  options?: Partial<ConversionOptions>;
+}
+
 export interface SelectedInputItem {
   id: string;
   file: File;
@@ -75,6 +82,9 @@ export interface SelectedInputItem {
 interface AppContextValue {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
+  activeWorkspace: ActiveWorkspaceState | null;
+  openWorkspace: (workspace: ActiveWorkspaceState) => void;
+  closeWorkspace: () => void;
   hasFullscreenOverlay: boolean;
   registerOverlay: () => () => void;
   toastMessage: string | null;
@@ -183,6 +193,13 @@ function revokeThumb(item: SelectedInputItem): void {
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('convert');
+  const [activeWorkspace, setActiveWorkspace] = useState<ActiveWorkspaceState | null>(null);
+  const openWorkspace = useCallback((workspace: ActiveWorkspaceState) => {
+    setActiveWorkspace(workspace);
+  }, []);
+  const closeWorkspace = useCallback(() => {
+    setActiveWorkspace(null);
+  }, []);
   const [overlayCount, setOverlayCount] = useState(0);
   const registerOverlay = useCallback(() => {
     setOverlayCount((c) => c + 1);
@@ -329,6 +346,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const launchCustomPreset = useCallback((preset: ConversionPreset) => {
     setPendingPresetLaunch(preset);
     setActiveTab('convert');
+    setActiveWorkspace({
+      toolId: 'universal',
+      target: preset.targetFormat,
+      options: preset.options,
+    });
   }, []);
 
   const consumePendingPresetLaunch = useCallback(() => {
@@ -880,7 +902,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const value: AppContextValue = {
     activeTab,
     setActiveTab,
-    hasFullscreenOverlay: overlayCount > 0,
+    activeWorkspace,
+    openWorkspace,
+    closeWorkspace,
+    hasFullscreenOverlay: overlayCount > 0 || activeWorkspace !== null,
     registerOverlay,
     toastMessage,
     showToast,

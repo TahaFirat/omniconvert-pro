@@ -3,7 +3,8 @@ import { Crown, WifiOff } from 'lucide-react';
 import { useApp } from '../../application/AppContext';
 
 export const TopBar: React.FC = () => {
-  const { activeTab, settings, dict, entitlements, setPaywallOpen, toggleOfflineOnlyMode } = useApp();
+  const { activeTab, settings, dict, entitlements, setPaywallOpen, toggleOfflineOnlyMode, hasFullscreenOverlay } = useApp();
+  if (hasFullscreenOverlay) return null;
   const isOffline = settings.offlineOnlyMode;
 
   const pageTitle =

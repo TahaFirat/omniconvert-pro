@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowDown,
@@ -37,6 +37,7 @@ interface ToolWorkspaceSheetProps {
   initialTarget?: string;
   initialOptions?: Partial<ConversionOptions>;
   onClose: () => void;
+  embeddedInShell?: boolean;
 }
 
 const MERGEABLE_FORMATS = new Set(['pdf', 'png', 'jpg', 'webp', 'bmp', 'heic', 'heif', 'tiff', 'svg']);
@@ -46,6 +47,7 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
   initialTarget,
   initialOptions,
   onClose,
+  embeddedInShell = false,
 }) => {
   const {
     settings,
@@ -60,8 +62,11 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
     registerOverlay,
   } = useApp();
 
-  // Hide BottomNav & portal directly into document.body so iOS WKWebView NEVER overlaps header/footer!
-  useEffect(() => registerOverlay(), [registerOverlay]);
+  // Synchronously hide TopBar & BottomNav if mounted standalone outside AppShell
+  useLayoutEffect(() => {
+    if (embeddedInShell) return;
+    return registerOverlay();
+  }, [embeddedInShell, registerOverlay]);
 
   const toolSpec = getGuidedTool(toolId);
   const toolCopy = toolSpec ? dict.tools[toolSpec.copyKey] : null;
@@ -288,7 +293,7 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
 
   const workspaceView = (
     <div
-      className="fullscreen-view"
+      className={embeddedInShell ? 'fullscreen-view fullscreen-view--flow' : 'fullscreen-view'}
       role="dialog"
       aria-modal="true"
       aria-label={toolCopy?.title ?? dict.targetPicker.title}
@@ -573,7 +578,7 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Plus size={18} />
-                <span>{toolCopy?.pickCta ?? dict.convert.addMore}</span>
+                <span>{(toolCopy?.pickCta ?? dict.convert.addMore).replace(/^\+\s*/, '')}</span>
               </button>
             </section>
           )}
@@ -1175,6 +1180,10 @@ export const ToolWorkspaceSheet: React.FC<ToolWorkspaceSheetProps> = ({
       <FilePreviewModal target={previewItem} onClose={() => setPreviewItem(null)} />
     </div>
   );
+
+  if (embeddedInShell) {
+    return workspaceView;
+  }
 
   return typeof document !== 'undefined' ? createPortal(workspaceView, document.body) : workspaceView;
 };

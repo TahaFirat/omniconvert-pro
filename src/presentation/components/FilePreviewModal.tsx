@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Check,
@@ -85,8 +85,8 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     return null;
   }, [output, target, originalSizeBytes, originalBlob]);
 
-  // Hide BottomNav while Full-Screen Preview is active
-  useEffect(() => {
+  // Synchronously hide TopBar & BottomNav before paint while Full-Screen Preview is active
+  useLayoutEffect(() => {
     if (!item) return;
     return registerOverlay();
   }, [item, registerOverlay]);

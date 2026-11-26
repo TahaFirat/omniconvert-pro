@@ -12,9 +12,8 @@ const config: CapacitorConfig = {
   ios: {
     contentInset: 'never',
     allowsLinkPreview: false,
-    scrollEnabled: true,
+    scrollEnabled: false,
     preferredContentMode: 'mobile',
-    backgroundColor: '#000000',
   },
   plugins: {
     StatusBar: {
